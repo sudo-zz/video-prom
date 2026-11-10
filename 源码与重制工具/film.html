@@ -1,0 +1,2427 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<title>企业大模型安全脱敏网关 · 毫秒级全自动脱敏与密码簿闭环</title>
+<style>
+  :root {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+    --ink: #1d1d1f;
+    --sub: #6e6e73;
+    /* 4 High-Contrast Semantic Colors (不同颜色标注) */
+    --c-red: #e11d48;
+    --c-red-bg: #ffe4e6;
+    --c-red-bd: #fb7185;
+
+    --c-vio: #6d28d9;
+    --c-vio-bg: #ede9fe;
+    --c-vio-bd: #a78bfa;
+
+    --c-blu: #0284c7;
+    --c-blu-bg: #e0f2fe;
+    --c-blu-bd: #38bdf8;
+
+    --c-grn: #15803d;
+    --c-grn-bg: #dcfce7;
+    --c-grn-bd: #4ade80;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #f5f5f7; overflow: hidden; user-select: none; }
+
+  #stage {
+    position: relative;
+    overflow: hidden;
+    background: #f5f5f7;
+    font-family: var(--font);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+  }
+
+  /* ---------- Minimalist Single-Focus Apple Top Header ---------- */
+  #header {
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+    z-index: 40;
+  }
+  #msHud {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 416px;
+    height: 30px;
+    gap: 8px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(29, 29, 31, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.035);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #3a3a3c;
+    white-space: nowrap;
+  }
+  #msDot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #8e8e93;
+    flex-shrink: 0;
+  }
+  #msLabel {
+    display: inline-block;
+    width: 214px;
+    text-align: center;
+  }
+  #msVal {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 154px;
+    height: 20px;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: #f2f2f7;
+    color: #1d1d1f;
+  }
+  .ms-pre { font-family: var(--font); font-weight: 700; }
+  .ms-num {
+    display: inline-block;
+    width: 38px;
+    text-align: right;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    margin-right: 3px;
+  }
+  .ms-suf { font-family: var(--mono); }
+  .head-stage {
+    position: relative;
+    width: 100%;
+    height: 52px;
+    margin-top: 8px;
+  }
+  .head-item {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+  }
+  .mask-row {
+    overflow: hidden;
+    padding: 2px 16px 5px;
+  }
+  .mask-in {
+    display: inline-block;
+    font-size: 33px;
+    font-weight: 700;
+    letter-spacing: -0.026em;
+    line-height: 1.18;
+    color: #1d1d1f;
+    white-space: nowrap;
+  }
+
+  /* ---------- Camera Rig (Locked 1:1 Pixel-Exact Stage, Zero Sub-Pixel Resampling) ---------- */
+  #cam {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* ---------- Central Liquid Morphing Card (#mainCard) ---------- */
+  #mainCard {
+    position: absolute;
+    left: 0; top: 0;
+    z-index: 12;
+  }
+  .mc-shell {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid rgba(29, 29, 31, 0.09);
+    box-shadow: 0 26px 68px -18px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.04);
+  }
+  .view {
+    position: absolute;
+    inset: 0;
+    visibility: hidden;
+    opacity: 0;
+  }
+
+  .ui-bar {
+    height: 48px;
+    padding: 0 22px;
+    border-bottom: 1px solid rgba(29, 29, 31, 0.07);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ui-bar.dark-bar { border-bottom-color: rgba(255, 255, 255, 0.09); }
+  .ui-dots { display: flex; gap: 6px; margin-right: 4px; }
+  .ui-dots i { width: 10px; height: 10px; border-radius: 50%; background: #e5e5ea; display: block; }
+  .dark-bar .ui-dots i { background: rgba(255, 255, 255, 0.18); }
+  .ui-title {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 14px; font-weight: 700; color: #1d1d1f;
+    white-space: nowrap;
+  }
+  .dark-bar .ui-title { color: #e5e5ea; }
+  .ui-pill-btn {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 15px;
+    border-radius: 999px;
+    background: #1d1d1f;
+    color: #ffffff;
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    transform-origin: 50% 50%;
+  }
+  .ui-status-pill {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 13px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    background: #f2f2f7;
+    color: #3a3a3c;
+  }
+
+  /* ---------- View 1: User Client Input (100% Left-to-Right Sequential Typing) ---------- */
+  .v1-body { padding: 22px 26px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .v1-prose {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 30px;
+    color: #1d1d1f;
+    min-height: 30px;
+  }
+  .v1-uri-box {
+    font-family: var(--mono);
+    font-size: 17.5px;
+    line-height: 32px;
+    padding: 15px 20px;
+    border-radius: 14px;
+    background: #f5f5f7;
+    border: 1px solid rgba(29, 29, 31, 0.07);
+    color: #1d1d1f;
+    min-height: 64px;
+    word-break: break-all;
+  }
+  .t-ch { display: none; }
+  .caret {
+    display: none;
+    width: 2px;
+    height: 18px;
+    line-height: 1;
+    vertical-align: -3px;
+    margin-left: 2px;
+    background: #007aff;
+    border-radius: 1px;
+  }
+
+  /* ---------- View 2 & View 4: Explicit Highlighted Credential Slots ---------- */
+  .v2-body { padding: 14px 24px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .v2-prose {
+    font-size: 16.5px;
+    font-weight: 600;
+    color: #3a3a3c;
+  }
+  .uri-stage {
+    position: relative;
+    padding: 36px 18px 14px;
+    border-radius: 14px;
+    background: #f8f9fb;
+    border: 1px solid rgba(29, 29, 31, 0.075);
+    font-family: var(--mono);
+    font-size: 16.5px;
+    line-height: 32px;
+    color: #6e6e73;
+    white-space: nowrap;
+  }
+  .uri-dim {}
+
+  .cred-slot {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 10px;
+    margin: 0 3px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-family: var(--mono);
+    font-size: 15.5px;
+    font-weight: 700;
+    vertical-align: middle;
+    overflow: visible;
+  }
+  .slot-txt { white-space: nowrap; line-height: 1; }
+  .slot-callout {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    transform: translate(-50%, 0);
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  }
+  .slot-callout.red { background: var(--c-red); color: #ffffff; }
+  .slot-callout.blu { background: var(--c-blu); color: #ffffff; }
+  .slot-callout.grn { background: var(--c-grn); color: #ffffff; }
+
+  /* ---------- View 3: Cloud LLM Dark Card ---------- */
+  .v3-body { padding: 16px 24px 20px; color: #f5f5f7; display: flex; flex-direction: column; gap: 12px; }
+  .cloud-reason {
+    padding: 11px 16px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    font-size: 15.5px;
+    font-weight: 600;
+    line-height: 1.48;
+    color: #e5e5ea;
+  }
+  .cloud-reason code {
+    font-family: var(--mono);
+    font-size: 14px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: rgba(56, 189, 248, 0.16);
+    color: #7dd3fc;
+  }
+  .tu-dark-box {
+    border-radius: 14px;
+    background: #0b0c10;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    overflow: hidden;
+  }
+  .tu-head {
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.045);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 700; color: #7dd3fc;
+  }
+  .tu-head .r-note { margin-left: auto; font-family: var(--font); color: #98989d; font-weight: 600; }
+  .tu-code {
+    padding: 12px 18px;
+    font-family: var(--mono);
+    font-size: 14.5px;
+    line-height: 1.78;
+    color: #d1d1d6;
+  }
+  .c-tok-blu {
+    display: inline-block;
+    padding: 1px 8px;
+    margin: 0 2px;
+    border-radius: 6px;
+    background: rgba(2, 132, 199, 0.24);
+    border: 1px solid rgba(56, 189, 248, 0.55);
+    color: #7dd3fc;
+    font-weight: 700;
+  }
+  .c-tok-grn {
+    display: inline-block;
+    padding: 1px 8px;
+    margin: 0 2px;
+    border-radius: 6px;
+    background: var(--c-grn-bg);
+    border: 1px solid var(--c-grn-bd);
+    color: var(--c-grn);
+    font-weight: 700;
+  }
+
+  /* ---------- View 4: Decryption Upper Card (SQL Commands Top, PGURI Slots Bottom!) ---------- */
+  .v4-body { padding: 12px 24px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .v4-sql-preview {
+    padding: 9px 15px;
+    border-radius: 11px;
+    background: #f5f5f7;
+    border: 1px solid rgba(29, 29, 31, 0.06);
+    font-family: var(--mono);
+    font-size: 13.2px;
+    line-height: 1.62;
+    color: #515154;
+  }
+  .kw-blu { color: #0284c7; font-weight: 700; }
+  .cm-mut { color: #8e8e93; }
+
+  /* ---------- View 5: User Client Receives Decrypted Tool Use ---------- */
+  .v5-body { padding: 16px 24px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .v5-user-bubble {
+    align-self: flex-end;
+    padding: 9px 15px;
+    border-radius: 14px 14px 4px 14px;
+    background: #1d1d1f;
+    color: #f5f5f7;
+    font-size: 13.5px;
+  }
+  .v5-ai-card {
+    padding: 14px 18px;
+    border-radius: 15px;
+    background: #f8fafc;
+    border: 1px solid rgba(21, 128, 61, 0.30);
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .v5-code {
+    padding: 11px 15px;
+    border-radius: 11px;
+    background: #ffffff;
+    border: 1px solid rgba(29, 29, 31, 0.08);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 24px;
+    color: #1d1d1f;
+  }
+
+  /* ---------- View 6: 16.8 ms Full-Auto Climax ---------- */
+  .v6-body { padding: 18px 24px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .speed-hero {
+    display: flex; align-items: center; justify-content: space-between; gap: 22px;
+    padding: 18px 24px;
+    border-radius: 18px;
+    background: #1d1d1f;
+    color: #ffffff;
+  }
+  .sh-metric { display: flex; align-items: baseline; gap: 6px; flex-shrink: 0; }
+  .sh-num { display: inline-block; min-width: 132px; text-align: right; font-size: 62px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: #30d158; font-variant-numeric: tabular-nums; }
+  .sh-unit { font-family: var(--mono); font-size: 25px; font-weight: 700; color: #30d158; }
+  .sh-right { flex: 1; display: flex; flex-direction: column; gap: 9px; }
+  .sh-title { font-size: 18.5px; font-weight: 700; color: #f5f5f7; display: flex; align-items: center; justify-content: space-between; }
+  .sh-pipe { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .sp-node { padding: 4px 10px; border-radius: 8px; background: rgba(255,255,255,0.09); border: 1px solid rgba(255,255,255,0.12); font-size: 12px; font-weight: 600; color: #e5e5ea; white-space: nowrap; }
+  .sp-node b { font-family: var(--mono); color: #7dd3fc; margin-left: 4px; }
+  .sp-arr { color: #6e6e73; font-size: 12px; font-weight: 700; }
+  .bento-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
+  .bento-card { border-radius: 15px; background: #f5f5f7; border: 1px solid rgba(29,29,31,0.07); padding: 15px 18px; display: flex; flex-direction: column; gap: 4px; }
+  .bc-tag { font-family: var(--mono); font-size: 21px; font-weight: 800; color: #1d1d1f; letter-spacing: -0.02em; }
+  .bc-t { font-size: 14.5px; font-weight: 700; color: #1d1d1f; }
+  .bc-s { font-size: 12.5px; font-weight: 500; color: #6e6e73; line-height: 1.4; }
+
+  /* ---------- Dedicated Physical Hardware Unit: 脱敏网关 (#gwUnit · Mac mini Unibody) ---------- */
+  #gwUnit {
+    position: absolute;
+    left: 0; top: 0;
+    z-index: 28;
+    pointer-events: none;
+  }
+  .gw-shadow-wide {
+    position: absolute;
+    left: 4%; right: 4%; bottom: -20px; height: 38px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.08) 38%, rgba(0,0,0,0.02) 62%, rgba(0,0,0,0) 78%);
+  }
+  .gw-topdeck {
+    position: absolute;
+    left: 10px; right: 10px; top: -8px; height: 11px;
+    border-radius: 15px 15px 3px 3px;
+    background: linear-gradient(180deg, #ffffff 0%, #eef1f6 65%, #d6dbe4 100%);
+    border: 1px solid rgba(255, 255, 255, 0.94);
+  }
+  .gw-foot {
+    position: absolute;
+    left: 20%; right: 20%; bottom: -7px; height: 8px;
+    border-radius: 0 0 9px 9px;
+    background: linear-gradient(180deg, #151619 0%, #2a2c31 55%, #101114 100%);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px;
+  }
+  .vent-bank { display: flex; gap: 4px; }
+  .vent-bank i { width: 5px; height: 2px; border-radius: 1px; background: rgba(255,255,255,0.18); display: block; }
+  .gw-body {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background: linear-gradient(90deg,
+      #b8bdc7 0%,
+      #eef1f5 7%,
+      #dfe4ec 22%,
+      #f7f9fc 50%,
+      #dce1ea 78%,
+      #eef1f5 93%,
+      #b4b9c3 100%);
+    border: 1px solid rgba(29, 29, 31, 0.14);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.95), inset 0 -3px 6px rgba(0,0,0,0.10), 0 14px 34px -10px rgba(0,0,0,0.16);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .gw-label-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 232px;
+    height: 28px;
+    gap: 7px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(29, 29, 31, 0.86);
+    color: #f5f5f7;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .gw-led-wrap {
+    position: absolute;
+    right: 26px; top: 50%;
+    margin-top: -11px;
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gw-led-halo {
+    position: absolute;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+  }
+  .gw-led-bezel {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: rgba(29, 29, 31, 0.28);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; z-index: 2;
+  }
+  .gw-led-core { width: 4px; height: 4px; border-radius: 50%; background: #ffffff; }
+
+  /* ---------- Unified Codebook Vault (#vaultBox: 加密 ➔ 缩小左上角 ➔ 放大解密 ➔ 居中放大碎裂销毁) ---------- */
+  #vaultBox {
+    position: absolute;
+    left: 0; top: 0;
+    transform-origin: 0 0;
+    border-radius: 22px;
+    background: #ffffff;
+    border: 1px solid rgba(29, 29, 31, 0.11);
+    box-shadow: 0 26px 64px -18px rgba(0, 0, 0, 0.14), 0 4px 16px rgba(0, 0, 0, 0.04);
+    padding: 15px 20px 15px;
+    z-index: 14;
+    overflow: visible;
+  }
+  .vb-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding-bottom: 10px;
+    margin-bottom: 9px;
+    border-bottom: 1px solid rgba(29, 29, 31, 0.08);
+  }
+  .vb-icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: #1d1d1f;
+    color: #ffffff;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .vb-title { font-size: 15px; font-weight: 700; color: #1d1d1f; }
+  .vb-sub { font-size: 12px; font-weight: 500; color: #6e6e73; margin-left: 4px; }
+  .vb-badge {
+    margin-left: auto;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    background: #f2f2f7;
+    color: #3a3a3c;
+    white-space: nowrap;
+  }
+  .vb-list { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
+  .vb-bg-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-radius: 9px;
+    background: #f5f5f7;
+    border: 1px solid rgba(29, 29, 31, 0.05);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #8e8e93;
+  }
+  .vb-bg-tag { font-family: var(--font); font-size: 11px; font-weight: 600; color: #aeaeb2; }
+
+  #vbActiveWrap { position: relative; overflow: visible; }
+  #vbActiveRows { display: flex; flex-direction: column; gap: 7px; overflow: visible; }
+
+  .vb-act-row {
+    position: relative;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    overflow: visible;
+  }
+  .vb-act-bg {
+    position: absolute;
+    inset: 0;
+    border-radius: 11px;
+    background: #fafafa;
+    border: 1px solid rgba(29, 29, 31, 0.09);
+  }
+  .vb-act-grid {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    padding: 0 12px;
+    display: grid;
+    grid-template-columns: 98px 1.15fr 24px 1.05fr 24px 1.05fr;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 13.2px;
+    font-weight: 700;
+    overflow: visible;
+  }
+  .vb-k-tag {
+    font-family: var(--font);
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #515154;
+    background: #efeff4;
+    padding: 4px 8px;
+    border-radius: 6px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .vb-cell {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    padding: 0 9px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .vb-cell.empty-wait {
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .vb-step-arr {
+    text-align: center;
+    font-size: 13px;
+    color: #aeaeb2;
+  }
+
+  .vb-crack {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+  }
+  .v-ch {
+    display: inline-block;
+    white-space: pre;
+  }
+  .v-chip {
+    position: absolute;
+    width: 6px; height: 6px;
+    clip-path: polygon(50% 0%, 100% 85%, 0% 100%);
+    pointer-events: none;
+    z-index: 6;
+    opacity: 0;
+  }
+  #vbClearedSeal {
+    position: absolute;
+    left: 0; right: 0; top: 4px;
+    height: 42px;
+    border-radius: 12px;
+    background: var(--c-grn-bg);
+    border: 1px dashed var(--c-grn);
+    color: var(--c-grn);
+    font-size: 13.5px;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Unscaled Crisp Label for Minimized Top-Left Codebook (#vaultMiniBadge) */
+  #vaultMiniBadge {
+    position: absolute;
+    left: 0; top: 0;
+    z-index: 22;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: #1d1d1f;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+    pointer-events: none;
+    visibility: hidden;
+  }
+  #vaultMiniBadge i { width: 7px; height: 7px; border-radius: 50%; background: #38bdf8; display: block; }
+
+  /* ---------- Unified Progressive Cloud Terminal (#cloudOutCard: 请求接收 ➔ 深度思考推理 ➔ 返回 Tool Use) ---------- */
+  #cloudOutCard {
+    position: absolute;
+    left: 0; top: 0;
+    border-radius: 22px;
+    padding: 18px 22px 20px;
+    background: #131418;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    box-shadow: 0 28px 68px -16px rgba(0, 0, 0, 0.32);
+    color: #f5f5f7;
+    z-index: 13;
+    overflow: hidden;
+    visibility: hidden;
+  }
+  .co-top {
+    display: flex; align-items: center; gap: 8px;
+    padding-bottom: 11px; margin-bottom: 11px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    font-size: 13.5px; font-weight: 700; color: #e5e5ea;
+  }
+  .co-dots { display: flex; gap: 5px; margin-right: 3px; }
+  .co-dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); display: block; }
+  .co-badge {
+    margin-left: auto;
+    padding: 3px 11px;
+    border-radius: 999px;
+    font-size: 11.5px; font-weight: 700;
+    background: rgba(56, 189, 248, 0.16);
+    color: #7dd3fc;
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    white-space: nowrap;
+  }
+  .co-sec-req {
+    padding: 11px 15px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.085);
+  }
+  .co-req-row {
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+    font-size: 14.5px; font-weight: 600; color: #f5f5f7;
+  }
+  .co-sec-tag {
+    padding: 2px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 700;
+    background: rgba(255, 255, 255, 0.10); color: #cbd5e1;
+    white-space: nowrap;
+  }
+  .co-code {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 9px;
+    background: #0b0c10;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 23px;
+    color: #98989d;
+  }
+  .co-sec-think {
+    margin-top: 11px;
+    padding: 11px 15px;
+    border-radius: 12px;
+    background: rgba(56, 189, 248, 0.055);
+    border: 1px solid rgba(56, 189, 248, 0.22);
+    border-left: 4px solid #38bdf8;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .cot-head {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; font-weight: 700; color: #7dd3fc;
+  }
+  .cot-meta {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11.5px; font-weight: 600; color: #94a3b8;
+  }
+  .cot-step {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 13.5px; line-height: 20px; color: #e2e8f0;
+  }
+  .cot-idx {
+    flex-shrink: 0;
+    margin-top: 2px;
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-family: var(--mono);
+    font-size: 11px; font-weight: 700;
+    background: rgba(56, 189, 248, 0.18); color: #7dd3fc;
+  }
+  .cot-step b { color: #ffffff; font-weight: 700; }
+  .cot-step code {
+    font-family: var(--mono); font-size: 12.5px;
+    padding: 1px 5px; border-radius: 5px;
+    background: rgba(255, 255, 255, 0.09); color: #bae6fd;
+  }
+  .co-sec-ret {
+    margin-top: 11px;
+    border-radius: 13px;
+    background: #0b0c10;
+    border: 1px solid rgba(48, 209, 88, 0.34);
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .co-ret-head {
+    padding: 7px 14px;
+    background: rgba(48, 209, 88, 0.10);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 700; color: #4ade80;
+  }
+  .co-ret-head .r-note {
+    margin-left: auto;
+    font-family: var(--font); font-size: 11.5px; font-weight: 600; color: #86efac;
+  }
+  .co-ret-summary {
+    padding: 8px 14px 2px;
+    font-size: 13.5px; font-weight: 600; color: #e5e5ea;
+  }
+  .co-ret-summary code {
+    font-family: var(--mono); font-size: 12.5px;
+    padding: 1px 6px; border-radius: 5px;
+    background: rgba(48, 209, 88, 0.14); color: #86efac;
+  }
+  .co-ret-code {
+    padding: 7px 14px 11px;
+    font-family: var(--mono);
+    font-size: 13.2px;
+    line-height: 23px;
+    color: #d1d1d6;
+  }
+
+  /* ---------- SVG Arrow Layer & Physical Flying Pills Layer ---------- */
+  #arrowSvg {
+    position: absolute;
+    left: 0; top: 0;
+    pointer-events: none;
+    z-index: 22;
+  }
+  #flyLayer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 26;
+  }
+  .fly-pill {
+    position: absolute;
+    left: 0; top: 0;
+    height: 32px;
+    padding: 0 11px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+    visibility: hidden;
+  }
+  #runwayBadge {
+    position: absolute;
+    left: 0; top: 0;
+    z-index: 27;
+    padding: 5px 15px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 700;
+    background: #ffffff;
+    border: 1px solid rgba(29, 29, 31, 0.12);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    white-space: nowrap;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  /* ---------- Finale Brand Lockup ---------- */
+  #finaleLockup {
+    position: absolute;
+    left: 0; right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    pointer-events: none;
+    z-index: 30;
+    visibility: hidden;
+  }
+  .fin-badge {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #6e6e73;
+    margin-bottom: 12px;
+  }
+  .fin-title {
+    font-size: 54px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: #1d1d1f;
+    line-height: 1.14;
+  }
+  .fin-sub {
+    margin-top: 10px;
+    font-size: 24px;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: #515154;
+  }
+  .fin-spec {
+    margin-top: 22px;
+    padding: 9px 22px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid rgba(29, 29, 31, 0.09);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.05);
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: #3a3a3c;
+  }
+
+  /* ---------- Single Initial Send Cursor ---------- */
+  #cursor {
+    position: absolute;
+    left: 0; top: 0;
+    width: 30px; height: 30px;
+    transform-origin: 5px 3px;
+    pointer-events: none;
+    z-index: 50;
+  }
+  #clickRing {
+    position: absolute;
+    left: 0; top: 0;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(29, 29, 31, 0.48);
+    pointer-events: none;
+    z-index: 49;
+  }
+  #progress {
+    position: absolute;
+    left: 0; bottom: 0;
+    width: 0px;
+    height: 3px;
+    background: #1d1d1f;
+    z-index: 45;
+    opacity: 0.32;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="header">
+    <div id="msHud">
+      <span id="msDot"></span>
+      <span id="msLabel">客户端输入中</span>
+      <span id="msVal"><span class="ms-pre" id="msPre">无需多余操作</span><span class="ms-num" id="msNum" style="display:none">0.0</span><span class="ms-suf" id="msSuf" style="display:none">ms</span></span>
+    </div>
+    <div class="head-stage" id="headStage"></div>
+  </div>
+
+  <div id="cam">
+    <div id="mainCard">
+      <div class="mc-shell" id="mcShell">
+        <div class="view" id="v1"></div>
+        <div class="view" id="v2"></div>
+        <div class="view" id="v3"></div>
+        <div class="view" id="v4"></div>
+        <div class="view" id="v5"></div>
+        <div class="view" id="v6"></div>
+      </div>
+    </div>
+
+    <div id="gwUnit">
+      <div class="gw-shadow-wide"></div>
+      <div class="gw-topdeck"></div>
+      <div class="gw-foot">
+        <div class="vent-bank"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="vent-bank"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="gw-body">
+        <div class="gw-label-pill" id="gwLabelPill"></div>
+        <div class="gw-led-wrap">
+          <div class="gw-led-halo" id="ledHalo"></div>
+          <div class="gw-led-bezel"><div class="gw-led-core" id="ledCore"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="vaultBox"></div>
+    <div id="vaultMiniBadge"><i></i><span>本地密码簿 · 内网隔离待命 (3 项)</span></div>
+
+    <div id="cloudOutCard"></div>
+
+    <svg id="arrowSvg"></svg>
+    <div id="flyLayer">
+      <div class="fly-pill" id="fly0"></div>
+      <div class="fly-pill" id="fly1"></div>
+      <div class="fly-pill" id="fly2"></div>
+    </div>
+    <div id="runwayBadge"></div>
+
+    <div id="clickRing"></div>
+    <div id="cursor">
+      <svg viewBox="0 0 30 30" fill="none">
+        <path d="M5.8 4.6L24.2 15.9L15.4 18.1L11.2 26.6L5.8 4.6Z" fill="rgba(0,0,0,0.16)"/>
+        <path d="M5.2 2.8L23.6 14.1L14.8 16.3L10.6 24.8L5.2 2.8Z" fill="#1d1d1f" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <div id="finaleLockup"></div>
+  <div id="progress"></div>
+</div>
+
+<script>
+// =============================================================================
+// v11: Zero-Jitter Deterministic Edition · Single Focus · Integer Pixel Lock
+// =============================================================================
+const Q = new URLSearchParams(location.search);
+const P = Q.get("ar") === "9x16";
+const W = P ? 1080 : 1920;
+const H = P ? 1920 : 1080;
+const CX = W / 2;
+const CY = H / 2;
+const DUR = 39.0;
+const BRAND = Q.get("brand") || "企业大模型安全脱敏网关";
+
+const stage = document.getElementById("stage");
+stage.style.width = W + "px";
+stage.style.height = H + "px";
+const arrowSvg = document.getElementById("arrowSvg");
+arrowSvg.setAttribute("width", W);
+arrowSvg.setAttribute("height", H);
+arrowSvg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+
+// =============================================================================
+// Math, Closed-Form Spring Tracks & Exact De Casteljau Cubic Bezier Subdivision
+// =============================================================================
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, k) => a + (b - a) * k;
+const smooth = (k) => k * k * (3 - 2 * k);
+const easeInOut = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+const P4 = (v) => v.toFixed(4);
+const P6 = (v) => v.toFixed(6);
+
+// Exact finite-duration C2 quintic ease (zero overshoot, zero asymptotic sub-pixel tail crawl!)
+function springStep(dt, freq = 14) {
+  if (dt <= 0) return 0;
+  const dur = 5.6 / freq;
+  if (dt >= dur) return 1;
+  const u = dt / dur;
+  return u * u * u * (u * (u * 6 - 15) + 10);
+}
+
+function track(t, initVal, keyframes) {
+  let val = initVal, prev = initVal;
+  for (let i = 0; i < keyframes.length; i++) {
+    const [t0, target, freq = 14] = keyframes[i];
+    const d = target - prev;
+    if (t > t0 && d !== 0) val += d * springStep(t - t0, freq);
+    prev = target;
+  }
+  return val;
+}
+
+function trackColor(t, initRGB, keyframes) {
+  const r = track(t, initRGB[0], keyframes.map(([t0, c, f]) => [t0, c[0], f]));
+  const g = track(t, initRGB[1], keyframes.map(([t0, c, f]) => [t0, c[1], f]));
+  const b = track(t, initRGB[2], keyframes.map(([t0, c, f]) => [t0, c[2], f]));
+  return `rgb(${Math.round(clamp(r, 0, 255))},${Math.round(clamp(g, 0, 255))},${Math.round(clamp(b, 0, 255))})`;
+}
+
+// Symmetric, zero-overshoot card geometry interpolation (prevents edge wobble & layout reflow)
+function morphBox(t, initRect, states) {
+  let cx = initRect[0], cy = initRect[1], w = initRect[2], h = initRect[3], rad = initRect[4];
+  let pCx = cx, pCy = cy, pW = w, pH = h, pRad = rad;
+
+  for (let i = 0; i < states.length; i++) {
+    const [t0, tCx, tCy, tW, tH, tRad, f = 14] = states[i];
+    if (t > t0) {
+      const k = springStep(t - t0, f);
+      cx  += (tCx - pCx) * k;
+      cy  += (tCy - pCy) * k;
+      w   += (tW - pW) * k;
+      h   += (tH - pH) * k;
+      rad += (tRad - pRad) * k;
+    }
+    pCx = tCx; pCy = tCy; pW = tW; pH = tH; pRad = tRad;
+  }
+  return { cx, cy, w: Math.max(44, w), h: Math.max(36, h), rad: Math.max(0, rad) };
+}
+
+// Exact De Casteljau subdivision of Cubic Bezier [0..u] + leading tip angle
+function partialBezier(p0, p1, p2, p3, u) {
+  const k = clamp(u, 0.001, 1);
+  const q0 = [lerp(p0[0], p1[0], k), lerp(p0[1], p1[1], k)];
+  const q1 = [lerp(p1[0], p2[0], k), lerp(p1[1], p2[1], k)];
+  const q2 = [lerp(p2[0], p3[0], k), lerp(p2[1], p3[1], k)];
+  const r0 = [lerp(q0[0], q1[0], k), lerp(q0[1], q1[1], k)];
+  const r1 = [lerp(q1[0], q2[0], k), lerp(q1[1], q2[1], k)];
+  const b  = [lerp(r0[0], r1[0], k), lerp(r0[1], r1[1], k)];
+  const ang = Math.atan2(b[1] - r0[1], b[0] - r0[0]) * (180 / Math.PI);
+  return {
+    d: `M ${P4(p0[0])} ${P4(p0[1])} C ${P4(q0[0])} ${P4(q0[1])}, ${P4(r0[0])} ${P4(r0[1])}, ${P4(b[0])} ${P4(b[1])}`,
+    tip: b,
+    ang
+  };
+}
+
+function S(el, prop, v) {
+  const c = el._c || (el._c = {});
+  if (c[prop] === v) return;
+  c[prop] = v;
+  if (prop.startsWith("--")) el.style.setProperty(prop, v);
+  else el.style[prop] = v;
+}
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+// =============================================================================
+// SVG Icons & Domain Data (Four-Color Credential Mapping)
+// =============================================================================
+const IC = {
+  send: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>`,
+  lock: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`,
+  key: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg>`,
+  shield: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`,
+  cloud: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`,
+  term: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
+  zap: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  think: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3"/><path d="M18.36 5.64l-2.12 2.12"/><path d="M21 12h-3"/><path d="M18.36 18.36l-2.12-2.12"/><path d="M12 21v-3"/><path d="M5.64 18.36l2.12-2.12"/><path d="M3 12h3"/><path d="M5.64 5.64l2.12 2.12"/><circle cx="12" cy="12" r="3.2"/></svg>`
+};
+
+const ENT = [
+  { id: "#091", tag: "① 账号", decTag: "① 待解析账号", real: "db_fin_admin",      mask: "{{USER_8d4e}}", cipher: "AES:9f2a…e81c" },
+  { id: "#092", tag: "② 密码", decTag: "② 待解析密码", real: "Kp9#mX2v",          mask: "{{PWD_5a1f}}",  cipher: "AES:4c7b…109d" },
+  { id: "#093", tag: "③ 地址", decTag: "③ 待解析地址", real: "10.28.104.56:5432", mask: "{{HOST_3b9c}}", cipher: "AES:7e31…b402" }
+];
+
+// =============================================================================
+// Responsive Layout Coordinates (16:9 Landscape & 9:16 WeChat Vertical)
+// =============================================================================
+const SY = P ? 1000 : 575;
+const L = P ? {
+  headTop: 68,
+  headSize: 33,
+  clientIn:  [CX, 950, 950, 256, 26],
+  encCard:   [CX, 386, 950, 224, 24],
+  gwWork:    [CX, 736, 480, 74],
+  vaultWork: [CX, 1086], vaultW: 950,
+  // Scene 3: Left Intranet preserved (Mini Vault + Gateway) + Top-Anchored Progressive Cloud Terminal
+  vaultMini: [236, 286], vaultMiniScale: 0.36,
+  gwCloud:   [CX, 482, 460, 74],
+  cloudOutLeft: 65, cloudOutTop: 672, cloudOutW: 950,
+  // Scene 4A: Decryption (Upper Card + Gateway + Enlarged Vault)
+  decCard:   [CX, 416, 950, 276, 24],
+  gwDec:     [CX, 786, 480, 74],
+  vaultDec:  [CX, 1136],
+  // Scene 4B: Center Spotlight Shatter
+  vaultHero: [CX, 980], vaultHeroScale: 1.04,
+  // Scene 5 & 6
+  clientOut: [CX, 960, 950, 362, 26],
+  speedCard: [CX, 980, 950, 542, 26],
+  gwFinale:  [CX, 780, 530, 94],
+  finTop:    950
+} : {
+  headTop: 38,
+  headSize: 32,
+  clientIn:  [CX, 580, 1160, 224, 26],
+  encCard:   [CX, 252, 1160, 204, 24],
+  gwWork:    [CX, 542, 460, 68],
+  vaultWork: [CX, 818], vaultW: 960,
+  // Scene 3: Left Intranet preserved (Mini Vault + Gateway) + Top-Anchored Progressive Cloud Terminal
+  vaultMini: [212, 226], vaultMiniScale: 0.35,
+  gwCloud:   [400, 420, 400, 74],
+  cloudOutLeft: 876, cloudOutTop: 310, cloudOutW: 960,
+  // Scene 4A: Decryption
+  decCard:   [CX, 272, 1160, 248, 24],
+  gwDec:     [CX, 554, 460, 68],
+  vaultDec:  [CX, 828],
+  // Scene 4B: Center Spotlight Shatter
+  vaultHero: [CX, 588], vaultHeroScale: 1.14,
+  // Scene 5 & 6
+  clientOut: [CX, 580, 1160, 316, 26],
+  speedCard: [CX, 566, 1160, 352, 26],
+  gwFinale:  [CX, 400, 520, 92],
+  finTop:    548
+};
+
+// =============================================================================
+// Build Static DOM Once
+// =============================================================================
+document.getElementById("header").style.top = L.headTop + "px";
+const gwLabelTxt = document.createElement("span");
+gwLabelTxt.textContent = "脱敏网关";
+document.getElementById("gwLabelPill").innerHTML = IC.shield;
+document.getElementById("gwLabelPill").appendChild(gwLabelTxt);
+
+const HEADLINES = [
+  [0.04,  2.86, "正常发送排障请求，后续全程毫秒级自动接管"],
+  [2.92,  6.32, "自动识别三处敏感凭据，提取送入脱敏网关"],
+  [6.38, 11.12, "密码簿加密生成脱敏代号，自动回填替换原文"],
+  [11.18, 13.42, "敏感映射内网留存，脱敏密文自动发往云端"],
+  [13.48, 17.50, "云端零明文深度思考，精准推导异常根因与排障逻辑"],
+  [17.56, 21.50, "自动引用脱敏代号，生成并返回 Tool Use 诊断命令"],
+  [21.58, 26.30, "网关对照密码簿自动解密，还原真实凭据回填"],
+  [26.36, 29.46, "用完即焚：单次会话闭环，对应映射即刻清除"],
+  [29.52, 32.06, "可执行命令无感传回客户端，排障即刻闭环"],
+  [32.12, 36.10, "全过程仅在十几毫秒内完成，全程零手动干预"]
+];
+
+const headStage = document.getElementById("headStage");
+const headNodes = HEADLINES.map(([tIn, tOut, title]) => {
+  const d = document.createElement("div");
+  d.className = "head-item";
+  d.innerHTML = `<div class="mask-row"><span class="mask-in" style="font-size:${L.headSize}px">${esc(title)}</span></div>`;
+  headStage.appendChild(d);
+  return { el: d, tIn, tOut, titleEl: d.querySelector(".mask-in") };
+});
+
+// --- View 1: User Client Input (100% Flat Character Spans -> ZERO Garbled Layout!)
+const PROMPT_STR = "目前知识库负载异常，下面是连接信息，你帮我看看这是怎么了";
+const URI_STR = "postgres://db_fin_admin:Kp9#mX2v@10.28.104.56:5432/db?max_conns=500&idle_timeout=0";
+const seqSpans = (str) => [...str].map((ch) => `<span class="t-ch">${esc(ch)}</span>`).join("");
+
+const v1 = document.getElementById("v1");
+v1.innerHTML = `
+  <div class="ui-bar">
+    <div class="ui-dots"><i></i><i></i><i></i></div>
+    <div class="ui-title">${IC.term}<span>用户客户端 · AI 知识库排障助手</span></div>
+    <div class="ui-pill-btn" id="sendBtn"><span>发送</span>${IC.send}</div>
+  </div>
+  <div class="v1-body">
+    <div class="v1-prose" style="${P ? "font-size:21px" : ""}">${seqSpans(PROMPT_STR)}<span class="caret" id="caret1"></span></div>
+    <div class="v1-uri-box" style="${P ? "font-size:17px" : ""}">${seqSpans(URI_STR)}<span class="caret" id="caret2"></span></div>
+  </div>
+`;
+const sendBtn = document.getElementById("sendBtn");
+const v1Chars = [...v1.querySelectorAll(".t-ch")];
+const v1Line1Len = [...PROMPT_STR].length;
+const caret1 = document.getElementById("caret1");
+const caret2 = document.getElementById("caret2");
+
+// --- View 2: Upper Request Card for Encryption (Explicit 3 Credential Slots at Bottom!)
+const slotHtml = (prefix, idx, initTxt, calloutTxt, calloutCls) => `
+  <span class="cred-slot" id="${prefix}Slot${idx}" style="${P ? "font-size:13.8px;padding:0 7px;height:30px;margin:0 1.5px" : ""}">
+    <span class="slot-callout ${calloutCls}" id="${prefix}Call${idx}">${esc(calloutTxt)}</span>
+    <span class="slot-txt" id="${prefix}Txt${idx}">${esc(initTxt)}</span>
+  </span>`;
+
+const v2 = document.getElementById("v2");
+v2.innerHTML = `
+  <div class="ui-bar">
+    <div class="ui-dots"><i></i><i></i><i></i></div>
+    <div class="ui-title">${IC.term}<span>用户原始排障请求</span></div>
+    <div class="ui-status-pill" id="v2StatusPill">识别隐私字段中…</div>
+  </div>
+  <div class="v2-body">
+    <div class="v2-prose" id="v2Prose">目前<b>知识库负载异常</b>，下面是连接信息，你帮我看看这是怎么了</div>
+    <div class="uri-stage" style="${P ? "font-size:13.8px;padding:34px 12px 13px" : ""}">
+      <span class="uri-dim">postgres://</span>${slotHtml("enc", 0, ENT[0].real, ENT[0].tag, "red")}<span class="uri-dim">:</span>${slotHtml("enc", 1, ENT[1].real, ENT[1].tag, "red")}<span class="uri-dim">@</span>${slotHtml("enc", 2, ENT[2].real, ENT[2].tag, "red")}<span class="uri-dim">/db?max_conns=500&amp;idle_timeout=0</span>
+    </div>
+  </div>
+`;
+const v2StatusPill = document.getElementById("v2StatusPill");
+const v2Dims = [...v2.querySelectorAll(".uri-dim, #v2Prose")];
+const encSlotEls = [0, 1, 2].map((i) => ({
+  box: document.getElementById(`encSlot${i}`),
+  txt: document.getElementById(`encTxt${i}`),
+  call: document.getElementById(`encCall${i}`)
+}));
+
+// --- View 3: Cloud LLM Reasoning & Tool Use (Sees ONLY Ocean Blue Placeholders!)
+const v3 = document.getElementById("v3");
+v3.innerHTML = `
+  <div class="ui-bar dark-bar">
+    <div class="ui-dots"><i></i><i></i><i></i></div>
+    <div class="ui-title">${IC.cloud}<span>云端大模型 · 异常推理与 Tool Use 生成</span></div>
+    <div class="ui-status-pill" style="background:rgba(2,132,199,0.22);color:#7dd3fc;border:1px solid rgba(56,189,248,0.4)">仅见脱敏代号 · 0 明文</div>
+  </div>
+  <div class="v3-body">
+    <div class="cloud-reason" style="${P ? "font-size:16.5px" : ""}">
+      分析结论：<code>idle_timeout=0</code> 导致空闲连接长期不释放；需先检查当前数据库连接数与活跃会话状态，返回 <code>Tool Use</code> 命令：
+    </div>
+    <div class="tu-dark-box">
+      <div class="tu-head">
+        ${IC.zap}<span>tool_use: bash.execute_diagnostic</span>
+        <span class="r-note">自动引用脱敏代号构造连接参数</span>
+      </div>
+      <div class="tu-code" style="${P ? "font-size:13.8px;line-height:1.75;padding:12px 14px" : ""}">
+        <span style="color:#6e6e73"># 1. 查询当前连接数分布 &amp; 2. 查询活跃会话占用</span><br>
+        <span style="color:#7dd3fc;font-weight:700">PGURI</span>="postgres://<span class="c-tok-blu">${esc(ENT[0].mask)}</span>:<span class="c-tok-blu">${esc(ENT[1].mask)}</span>@${P ? "<br>  " : ""}<span class="c-tok-blu">${esc(ENT[2].mask)}</span>/db"<br>
+        <span style="color:#7dd3fc;font-weight:700">psql</span> "$PGURI" -c "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"<br>
+        <span style="color:#7dd3fc;font-weight:700">psql</span> "$PGURI" -c "SELECT pid, usename, state, query FROM pg_stat_activity;"
+      </div>
+    </div>
+  </div>
+`;
+
+// --- View 4: Decryption Card (SQL Commands on Top, Highlighted PGURI Slots on Bottom Facing Gateway!)
+const v4 = document.getElementById("v4");
+v4.innerHTML = `
+  <div class="ui-bar">
+    <div class="ui-dots"><i></i><i></i><i></i></div>
+    <div class="ui-title">${IC.zap}<span>云端返回 Tool Use 命令 · 网关拦截解析</span></div>
+    <div class="ui-status-pill" id="v4StatusPill">准备对照密码簿解析…</div>
+  </div>
+  <div class="v4-body">
+    <div class="v4-sql-preview" id="v4SqlTop" style="${P ? "font-size:12.6px" : ""}">
+      <span class="cm-mut"># 待执行诊断命令（连接串 $PGURI 需先还原真实账密）</span><br>
+      <span class="kw-blu">psql</span> "$PGURI" -c "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"<br>
+      <span class="kw-blu">psql</span> "$PGURI" -c "SELECT pid, usename, state, query FROM pg_stat_activity;"
+    </div>
+    <div class="uri-stage" style="${P ? "font-size:13.8px;padding:34px 12px 13px" : "padding:34px 18px 13px"}">
+      <span class="uri-dim">PGURI="postgres://</span>${slotHtml("dec", 0, ENT[0].mask, ENT[0].decTag, "blu")}<span class="uri-dim">:</span>${slotHtml("dec", 1, ENT[1].mask, ENT[1].decTag, "blu")}<span class="uri-dim">@</span>${slotHtml("dec", 2, ENT[2].mask, ENT[2].decTag, "blu")}<span class="uri-dim">/db"</span>
+    </div>
+  </div>
+`;
+const v4StatusPill = document.getElementById("v4StatusPill");
+const decSlotEls = [0, 1, 2].map((i) => ({
+  box: document.getElementById(`decSlot${i}`),
+  txt: document.getElementById(`decTxt${i}`),
+  call: document.getElementById(`decCall${i}`)
+}));
+
+// --- View 5: User Client Receives Decrypted Executable Tool Use
+const v5 = document.getElementById("v5");
+v5.innerHTML = `
+  <div class="ui-bar">
+    <div class="ui-dots"><i></i><i></i><i></i></div>
+    <div class="ui-title">${IC.term}<span>用户客户端 · 已收到可执行排障命令</span></div>
+    <div class="ui-status-pill" style="background:var(--c-grn-bg);color:var(--c-grn)">✓ 真实凭据已无感还原</div>
+  </div>
+  <div class="v5-body">
+    <div class="v5-user-bubble">目前知识库负载异常，下面是连接信息，你帮我看看这是怎么了</div>
+    <div class="v5-ai-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:700">
+        <span>AI 排障助手：建议立即核查连接池状态与活跃会话（已可直接执行）</span>
+        <span style="color:var(--c-grn);font-size:12.5px">0 手动修改</span>
+      </div>
+      <div class="v5-code" style="${P ? "font-size:13.2px" : ""}">
+        <span class="kw-blu">PGURI</span>="postgres://<span class="c-tok-grn">${esc(ENT[0].real)}</span>:<span class="c-tok-grn">${esc(ENT[1].real)}</span>@${P ? "<br>  " : ""}<span class="c-tok-grn">${esc(ENT[2].real)}</span>/db"<br>
+        <span class="kw-blu">psql</span> "$PGURI" -c "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"<br>
+        <span class="kw-blu">psql</span> "$PGURI" -c "SELECT pid, usename, state, query FROM pg_stat_activity;"
+      </div>
+    </div>
+  </div>
+`;
+
+// --- View 6: 16.8 ms Full-Auto Climax Showcase
+const v6 = document.getElementById("v6");
+v6.innerHTML = `
+  <div class="ui-bar">
+    <div class="ui-dots"><i></i><i></i><i></i></div>
+    <div class="ui-title">${IC.zap}<span>实测性能 · 全链路毫秒级无感自动闭环</span></div>
+    <div class="ui-status-pill" style="background:var(--c-grn-bg);color:var(--c-grn)">全程无需多余操作</div>
+  </div>
+  <div class="v6-body">
+    <div class="speed-hero" style="${P ? "flex-direction:column;align-items:flex-start;gap:14px;padding:20px" : ""}">
+      <div class="sh-metric">
+        <span class="sh-num" id="speedNum">16.8</span>
+        <span class="sh-unit">ms</span>
+      </div>
+      <div class="sh-right">
+        <div class="sh-title" style="${P ? "flex-direction:column;align-items:flex-start;gap:4px" : ""}">
+          <span>全过程仅在十几毫秒内自动完成，体验零折损</span>
+          <span style="font-size:12.5px;color:#30d158">硬件级流式透明处理 · 零感知延迟</span>
+        </div>
+        <div class="sh-pipe">
+          <span class="sp-node">识别<b>1.8ms</b></span><span class="sp-arr">→</span>
+          <span class="sp-node">替换<b>4.4ms</b></span><span class="sp-arr">→</span>
+          <span class="sp-node">上传<b>2.2ms</b></span><span class="sp-arr">→</span>
+          <span class="sp-node">还原<b>5.2ms</b></span><span class="sp-arr">→</span>
+          <span class="sp-node">清除<b>3.2ms</b></span>
+        </div>
+      </div>
+    </div>
+    <div class="bento-row" style="${P ? "grid-template-columns:1fr;gap:10px" : ""}">
+      <div class="bento-card" style="${P ? "flex-direction:row;align-items:center;justify-content:space-between" : ""}">
+        <div class="bc-tag" style="color:var(--c-grn)">无需多余操作</div>
+        <div style="${P ? "text-align:right" : ""}">
+          <div class="bc-t">硬件流式透明拦截</div>
+          <div class="bc-s">无需人工复制粘贴或手动打码</div>
+        </div>
+      </div>
+      <div class="bento-card" style="${P ? "flex-direction:row;align-items:center;justify-content:space-between" : ""}">
+        <div class="bc-tag" style="color:var(--c-blu)">私有化保险库</div>
+        <div style="${P ? "text-align:right" : ""}">
+          <div class="bc-t">0 字节真隐私出内网</div>
+          <div class="bc-s">AES-256 映射严格驻留本地网关</div>
+        </div>
+      </div>
+      <div class="bento-card" style="${P ? "flex-direction:row;align-items:center;justify-content:space-between" : ""}">
+        <div class="bc-tag" style="color:var(--c-red)">用完即焚</div>
+        <div style="${P ? "text-align:right" : ""}">
+          <div class="bc-t">单次会话闭环即销毁</div>
+          <div class="bc-s">完美兼容大模型 Tool Use 调用</div>
+        </div>
+      </div>
+    </div>
+  </div>
+`;
+const speedNum = document.getElementById("speedNum");
+
+// --- Unified Codebook Vault (#vaultBox: Active 3 Rows + 2 Dimmed Context Rows + Text Shatter!)
+const vaultBox = document.getElementById("vaultBox");
+vaultBox.style.width = L.vaultW + "px";
+
+const wrapVCh = (s) => [...s].map((c) => `<span class="v-ch">${esc(c)}</span>`).join("");
+
+function buildVaultRow(e, idx) {
+  const chipCols = ["#e11d48", "#6d28d9", "#0284c7", "#15803d"];
+  const chips = Array.from({ length: 18 }, (_, k) =>
+    `<i class="v-chip" style="left:${5 + k * 5.2}%;top:${22 + (k % 3) * 24}%;background:${chipCols[k % 4]}"></i>`
+  ).join("");
+  return `
+    <div class="vb-act-row" id="vbRow${idx}">
+      <div class="vb-act-bg" id="vbBg${idx}"></div>
+      <svg class="vb-crack" id="vbCrack${idx}" viewBox="0 0 600 46" preserveAspectRatio="none">
+        <path d="M10 26 L95 11 L182 34 L278 9 L374 33 L478 12 L590 25" fill="none" stroke="#e11d48" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      ${chips}
+      <div class="vb-act-grid" style="${P ? "grid-template-columns:86px 1.12fr 18px 1fr 18px 1.02fr;font-size:12.4px;padding:0 10px" : ""}">
+        <span class="vb-k-tag" id="vbKey${idx}">${wrapVCh(e.id + " " + e.tag.slice(2))}</span>
+        <span class="vb-cell" id="vbPlain${idx}">${wrapVCh(e.real)}</span>
+        <span class="vb-step-arr" id="vbArrA${idx}">→</span>
+        <span class="vb-cell" id="vbCipher${idx}">${wrapVCh(e.cipher)}</span>
+        <span class="vb-step-arr" id="vbArrB${idx}">→</span>
+        <span class="vb-cell" id="vbMask${idx}">${wrapVCh(e.mask)}</span>
+      </div>
+    </div>
+  `;
+}
+
+vaultBox.innerHTML = `
+  <div class="vb-head">
+    <div class="vb-icon">${IC.key}</div>
+    <div>
+      <span class="vb-title">脱敏网关 · 本地动态密码簿</span>
+      ${P ? "" : `<span class="vb-sub">保存加密映射规则 · 严禁出内网</span>`}
+    </div>
+    <div class="vb-badge" id="vbBadge">等待提取敏感凭据…</div>
+  </div>
+  <div class="vb-list">
+    <div class="vb-bg-row">
+      <span>#090  •••••••  →  AES:8a04…19cb  ↔  {{KEY_4b9d}}</span>
+      <span class="vb-bg-tag">其他会话加密留存</span>
+    </div>
+    <div id="vbActiveWrap">
+      <div id="vbActiveRows">${ENT.map((e, i) => buildVaultRow(e, i)).join("")}</div>
+      <div id="vbClearedSeal">${IC.check}<span>本次会话 3 项密码映射已彻底销毁 · 0 残留</span></div>
+    </div>
+    <div class="vb-bg-row">
+      <span>#094  •••••••  →  AES:5c29…a73e  ↔  {{JWT_2d6f}}</span>
+      <span class="vb-bg-tag">其他会话加密留存</span>
+    </div>
+  </div>
+`;
+
+const vbBadge = document.getElementById("vbBadge");
+const vbActiveWrap = document.getElementById("vbActiveWrap");
+const vbClearedSeal = document.getElementById("vbClearedSeal");
+const vbRows = [0, 1, 2].map((i) => {
+  const rowEl = document.getElementById(`vbRow${i}`);
+  const chars = [...rowEl.querySelectorAll(".v-ch")].map((el, ci) => {
+    const norm = (ci / 34) - 0.5;
+    const h1 = Math.sin((i + 1) * 91.7 + ci * 29.3);
+    const h2 = Math.cos((i + 2) * 57.1 + ci * 17.9);
+    return { el, vx: norm * 145 + h1 * 58, vy: -42 + h2 * 44, rot: h1 * 150 };
+  });
+  const chips = [...rowEl.querySelectorAll(".v-chip")].map((el, ki) => {
+    const a = (ki / 18) * Math.PI * 2 + i * 1.05;
+    const sp = 68 + (ki % 4) * 28;
+    return { el, vx: Math.cos(a) * sp * 1.4, vy: Math.sin(a) * sp - 22, rot: (ki % 2 ? 1 : -1) * 210 };
+  });
+  return {
+    rowEl,
+    bgEl: document.getElementById(`vbBg${i}`),
+    crackEl: document.getElementById(`vbCrack${i}`),
+    plainEl: document.getElementById(`vbPlain${i}`),
+    cipherEl: document.getElementById(`vbCipher${i}`),
+    maskEl: document.getElementById(`vbMask${i}`),
+    arrA: document.getElementById(`vbArrA${i}`),
+    arrB: document.getElementById(`vbArrB${i}`),
+    chars,
+    chips
+  };
+});
+
+// --- Unified Progressive Cloud Card (#cloudOutCard: Inbound Request -> Chain of Thought -> Returned Tool Use)
+const cloudOutCard = document.getElementById("cloudOutCard");
+cloudOutCard.style.width = L.cloudOutW + "px";
+cloudOutCard.innerHTML = `
+  <div class="co-top">
+    <div class="co-dots"><i></i><i></i><i></i></div>
+    ${IC.cloud}<span>云端大模型 · 异常诊断与推理终端</span>
+    <span class="co-badge" id="coStatusBadge">仅见脱敏代号 · 0 明文</span>
+  </div>
+  <div class="co-sec-req" id="coSecReq">
+    <div class="co-req-row">
+      <span class="co-sec-tag">收到网关请求</span>
+      <span>目前知识库负载异常，下面是连接信息，你帮我看看这是怎么了</span>
+    </div>
+    <div class="co-code">
+      postgres://<span class="c-tok-blu">${esc(ENT[0].mask)}</span>:<span class="c-tok-blu">${esc(ENT[1].mask)}</span>@${P ? "<br>" : ""}<span class="c-tok-blu">${esc(ENT[2].mask)}</span>/db?max_conns=500&amp;idle_timeout=0
+    </div>
+  </div>
+  <div class="co-sec-think" id="coSecThink">
+    <div class="cot-head">
+      ${IC.think}<span id="cotTitle">思考与推理过程</span>
+      <span class="cot-meta" id="cotMeta">基于脱敏上下文推导 · 零明文接触</span>
+    </div>
+    <div class="cot-step" id="cotStep0">
+      <span class="cot-idx">01</span>
+      <span><b>识别配置隐患：</b>解析连接参数发现 <code>max_conns=500</code> 且 <code>idle_timeout=0</code>，空闲连接永不超时回收，高并发下极易占满连接池。</span>
+    </div>
+    <div class="cot-step" id="cotStep1">
+      <span class="cot-idx">02</span>
+      <span><b>规划排障路径：</b>需先查询数据库 <code>pg_stat_activity</code> 视图，核实当前各状态连接数分布，以及长期未释放的活跃会话。</span>
+    </div>
+    <div class="cot-step" id="cotStep2">
+      <span class="cot-idx">03</span>
+      <span><b>构造工具调用：</b>全程无需获知真实账密，直接原样引用脱敏代号构造 <code>Tool Use</code> 诊断命令返回网关。</span>
+    </div>
+  </div>
+  <div class="co-sec-ret" id="coSecRet">
+    <div class="co-ret-head">
+      ${IC.zap}<span>返回内容 · tool_use: bash.execute_diagnostic</span>
+      <span class="r-note">携带脱敏代号发回脱敏网关</span>
+    </div>
+    <div class="co-ret-summary">诊断结论：疑似 <code>idle_timeout=0</code> 引发空闲连接堆积，请先执行以下状态核查命令：</div>
+    <div class="co-ret-code" style="${P ? "font-size:12.6px;line-height:1.68" : ""}">
+      <span style="color:#7dd3fc;font-weight:700">PGURI</span>="postgres://<span class="c-tok-blu">${esc(ENT[0].mask)}</span>:<span class="c-tok-blu">${esc(ENT[1].mask)}</span>@${P ? "<br>  " : ""}<span class="c-tok-blu">${esc(ENT[2].mask)}</span>/db"<br>
+      <span style="color:#7dd3fc;font-weight:700">psql</span> "$PGURI" -c "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"<br>
+      <span style="color:#7dd3fc;font-weight:700">psql</span> "$PGURI" -c "SELECT pid, usename, state, query FROM pg_stat_activity;"
+    </div>
+  </div>
+`;
+const domCoBadge = document.getElementById("coStatusBadge");
+const domCoReq   = document.getElementById("coSecReq");
+const domCoThink = document.getElementById("coSecThink");
+const domCoRet   = document.getElementById("coSecRet");
+const domCotMeta = document.getElementById("cotMeta");
+const domCotSteps = [0, 1, 2].map((i) => document.getElementById(`cotStep${i}`));
+
+// --- Finale Brand Lockup
+const finaleLockup = document.getElementById("finaleLockup");
+finaleLockup.style.top = L.finTop + "px";
+finaleLockup.innerHTML = `
+  <div class="fin-badge">ENTERPRISE AI SECURITY GATEWAY · 毫秒级全自动脱敏网关</div>
+  <div class="mask-row"><div class="fin-title" id="finTitle" style="${P ? "font-size:50px" : ""}">${esc(BRAND)}</div></div>
+  <div class="mask-row"><div class="fin-sub" id="finSub" style="${P ? "font-size:24px" : ""}">十几毫秒全自动无感闭环 · 让 AI 看懂问题，但看不见秘密。</div></div>
+  <div class="fin-spec" id="finSpec" style="${P ? "font-size:12.8px;padding:9px 16px" : ""}">无需多余操作  ·  私有化保险库  ·  用完即焚  ·  Tool Use 原生兼容</div>
+`;
+const finTitle = document.getElementById("finTitle");
+const finSub = document.getElementById("finSub");
+const finSpec = document.getElementById("finSpec");
+
+// =============================================================================
+// Pre-Measure Exact Sub-Pixel Slot & Vault Coordinates Once Before Animation!
+// =============================================================================
+const domMainCard = document.getElementById("mainCard");
+const domMcShell = document.getElementById("mcShell");
+const domGwUnit = document.getElementById("gwUnit");
+const domGwLabel = document.getElementById("gwLabelPill");
+const domLedCore = document.getElementById("ledCore");
+const domLedHalo = document.getElementById("ledHalo");
+const domMiniBadge = document.getElementById("vaultMiniBadge");
+const domFly = [0, 1, 2].map((i) => document.getElementById(`fly${i}`));
+const domRunwayBadge = document.getElementById("runwayBadge");
+const domCam = document.getElementById("cam");
+const domCursor = document.getElementById("cursor");
+const domClickRing = document.getElementById("clickRing");
+const domProgress = document.getElementById("progress");
+const domMsDot = document.getElementById("msDot");
+const domMsLabel = document.getElementById("msLabel");
+const domMsPre = document.getElementById("msPre");
+const domMsNum = document.getElementById("msNum");
+const domMsSuf = document.getElementById("msSuf");
+
+let M = null;
+function centerOf(el, stageRect) {
+  const r = el.getBoundingClientRect();
+  return {
+    cx: r.left - stageRect.left + r.width / 2,
+    cy: r.top - stageRect.top + r.height / 2,
+    top: r.top - stageRect.top,
+    bottom: r.bottom - stageRect.top,
+    w: r.width,
+    h: r.height
+  };
+}
+
+function measureOnce() {
+  const stageRect = stage.getBoundingClientRect();
+
+  // 1. Lock exact integer widths on #encSlot0..2 and #decSlot0..2 so URI layout never shifts 0.1px!
+  v2.style.visibility = "visible"; v2.style.opacity = "1";
+  v4.style.visibility = "visible"; v4.style.opacity = "1";
+  for (let i = 0; i < 3; i++) {
+    encSlotEls[i].txt.textContent = ENT[i].real;
+    const wR = encSlotEls[i].box.getBoundingClientRect().width;
+    encSlotEls[i].txt.textContent = ENT[i].mask;
+    const wM = encSlotEls[i].box.getBoundingClientRect().width;
+    encSlotEls[i].txt.textContent = "· 待回填 ·";
+    const wE = encSlotEls[i].box.getBoundingClientRect().width;
+    const fixedW = Math.ceil(Math.max(wR, wM, wE) / 2) * 2 + 4;
+    encSlotEls[i].box.style.width = fixedW + "px";
+    decSlotEls[i].box.style.width = fixedW + "px";
+    encSlotEls[i].txt.textContent = ENT[i].real;
+    decSlotEls[i].txt.textContent = ENT[i].mask;
+  }
+
+  // 2. Lock exact heights of #v1 prose & URI box with all characters visible, then measure Send button
+  v1.style.visibility = "visible"; v1.style.opacity = "1";
+  domMainCard.style.transform = "none";
+  domMainCard.style.width = L.clientIn[2] + "px";
+  domMainCard.style.height = L.clientIn[3] + "px";
+  domMainCard.style.left = (L.clientIn[0] - L.clientIn[2] / 2) + "px";
+  domMainCard.style.top  = (L.clientIn[1] - L.clientIn[3] / 2) + "px";
+  for (let i = 0; i < v1Chars.length; i++) v1Chars[i].style.display = "inline";
+  caret2.style.display = "inline-block";
+  const v1ProseEl = v1.querySelector(".v1-prose");
+  const v1UriEl   = v1.querySelector(".v1-uri-box");
+  v1ProseEl.style.height = Math.ceil(v1ProseEl.getBoundingClientRect().height) + "px";
+  v1UriEl.style.height   = Math.ceil(v1UriEl.getBoundingClientRect().height) + "px";
+  for (let i = 0; i < v1Chars.length; i++) v1Chars[i].style.display = "none";
+  caret2.style.display = "none";
+  const sendPt = centerOf(sendBtn, stageRect);
+  v1.style.visibility = "hidden"; v1.style.opacity = "0";
+
+  // 3. Measure #vaultBox natural height at 1x and lock to an even integer for 100% integer pixel alignment
+  vaultBox.style.transform = "none";
+  vaultBox.style.left = "0px";
+  vaultBox.style.top = "0px";
+  vaultBox.style.height = "auto";
+  const vaultH = Math.ceil(vaultBox.getBoundingClientRect().height / 2) * 2;
+  vaultBox.style.height = vaultH + "px";
+
+  // 4. Measure Scene 2 Encryption Slot & Vault Cell Coordinates
+  domMainCard.style.width = L.encCard[2] + "px";
+  domMainCard.style.height = L.encCard[3] + "px";
+  domMainCard.style.left = (L.encCard[0] - L.encCard[2] / 2) + "px";
+  domMainCard.style.top  = (L.encCard[1] - L.encCard[3] / 2) + "px";
+  vaultBox.style.left = (L.vaultWork[0] - L.vaultW / 2) + "px";
+  vaultBox.style.top  = (L.vaultWork[1] - vaultH / 2) + "px";
+  const encSlots  = [0, 1, 2].map((i) => centerOf(encSlotEls[i].box, stageRect));
+  const vEncPlain = [0, 1, 2].map((i) => centerOf(vbRows[i].plainEl, stageRect));
+  const vEncMask  = [0, 1, 2].map((i) => centerOf(vbRows[i].maskEl, stageRect));
+
+  // 5. Measure Scene 4A Decryption Slot & Vault Cell Coordinates
+  domMainCard.style.width = L.decCard[2] + "px";
+  domMainCard.style.height = L.decCard[3] + "px";
+  domMainCard.style.left = (L.decCard[0] - L.decCard[2] / 2) + "px";
+  domMainCard.style.top  = (L.decCard[1] - L.decCard[3] / 2) + "px";
+  vaultBox.style.left = (L.vaultDec[0] - L.vaultW / 2) + "px";
+  vaultBox.style.top  = (L.vaultDec[1] - vaultH / 2) + "px";
+  const decSlots  = [0, 1, 2].map((i) => centerOf(decSlotEls[i].box, stageRect));
+  const vDecMask  = [0, 1, 2].map((i) => centerOf(vbRows[i].maskEl, stageRect));
+  const vDecPlain = [0, 1, 2].map((i) => centerOf(vbRows[i].plainEl, stageRect));
+
+  v2.style.visibility = "hidden"; v2.style.opacity = "0";
+  v4.style.visibility = "hidden"; v4.style.opacity = "0";
+
+  // 6. Pin #vaultMiniBadge to exact static integer coordinates above minimized codebook
+  domMiniBadge.style.visibility = "visible";
+  const bRect = domMiniBadge.getBoundingClientRect();
+  domMiniBadge.style.left = Math.round(L.vaultMini[0] - bRect.width / 2) + "px";
+  domMiniBadge.style.top  = Math.round(L.vaultMini[1] - (vaultH * L.vaultMiniScale) / 2 - bRect.height - 10) + "px";
+  domMiniBadge.style.visibility = "hidden";
+
+  // 7. Pin #cloudOutCard top-left to exact static integers & measure its 3 progressive heights
+  cloudOutCard.style.left = L.cloudOutLeft + "px";
+  cloudOutCard.style.top  = L.cloudOutTop + "px";
+  cloudOutCard.style.visibility = "visible";
+  cloudOutCard.style.height = "auto";
+  domCoThink.style.display = "none";
+  domCoRet.style.display = "none";
+  const cloudH1 = Math.ceil(cloudOutCard.getBoundingClientRect().height / 2) * 2;
+  domCoThink.style.display = "flex";
+  const cloudH2 = Math.ceil(cloudOutCard.getBoundingClientRect().height / 2) * 2;
+  domCoRet.style.display = "flex";
+  const cloudH3 = Math.ceil(cloudOutCard.getBoundingClientRect().height / 2) * 2;
+  cloudOutCard.style.visibility = "hidden";
+
+  M = {
+    sendPt: [sendPt.cx, sendPt.cy],
+    encSlots, vEncPlain, vEncMask,
+    decSlots, vDecMask, vDecPlain,
+    vaultH,
+    actFullH: 46 * 3 + 7 * 2,
+    cloudH1, cloudH2, cloudH3
+  };
+}
+
+// =============================================================================
+// Master Closed-Form Critically-Damped Schedules
+// =============================================================================
+const MAIN_CARD_STATES = [
+  [0.02,  ...L.clientIn,  14.0], // Scene 1: User Client Input
+  [2.90,  ...L.encCard,   13.5], // Scene 2: Upper Request Card
+  [21.20, ...L.decCard,   13.5], // Scene 4A: Upper Tool Use Decrypt Card
+  [29.50, ...L.clientOut, 13.5], // Scene 5: User Client Receives Decrypted Tool Use
+  [32.10, ...L.speedCard, 13.5]  // Scene 6A: 16.8 ms Climax Showcase
+];
+
+function applyView(el, t, tIn, tOut) {
+  const opIn = tIn <= 0.05 ? 1 : smooth(seg(t, tIn, tIn + 0.22));
+  const opOut = tOut >= DUR ? 1 : 1 - smooth(seg(t, tOut - 0.20, tOut + 0.02));
+  const op = opIn * opOut;
+  S(el, "visibility", op > 0.003 ? "visible" : "hidden");
+  if (op <= 0.003) return false;
+  S(el, "opacity", P4(op));
+  return true;
+}
+
+function gatewayMsAt(t) {
+  if (t < 2.90) return 0;
+  if (t < 11.15) return lerp(0.2, 6.2, smooth(seg(t, 2.90, 9.80)));
+  if (t < 13.55) return lerp(6.2, 8.4, smooth(seg(t, 11.15, 13.20)));
+  if (t < 21.55) return 8.4;
+  if (t < 29.00) return lerp(8.4, 16.8, smooth(seg(t, 21.55, 28.00)));
+  return 16.8;
+}
+
+function setSlotStyle(slotObj, mode, textVal, callOp = 0) {
+  if (slotObj.txt.textContent !== textVal) slotObj.txt.textContent = textVal;
+  if (mode === "red") {
+    S(slotObj.box, "background", "#ffe4e6");
+    S(slotObj.box, "borderStyle", "solid");
+    S(slotObj.box, "borderColor", "#e11d48");
+    S(slotObj.box, "color", "#be123c");
+  } else if (mode === "blue") {
+    S(slotObj.box, "background", "#e0f2fe");
+    S(slotObj.box, "borderStyle", "solid");
+    S(slotObj.box, "borderColor", "#0284c7");
+    S(slotObj.box, "color", "#0369a1");
+  } else if (mode === "green") {
+    S(slotObj.box, "background", "#dcfce7");
+    S(slotObj.box, "borderStyle", "solid");
+    S(slotObj.box, "borderColor", "#16a34a");
+    S(slotObj.box, "color", "#15803d");
+  } else if (mode === "empty") {
+    S(slotObj.box, "background", "#f8fafc");
+    S(slotObj.box, "borderStyle", "dashed");
+    S(slotObj.box, "borderColor", "#94a3b8");
+    S(slotObj.box, "color", "#94a3b8");
+  } else {
+    S(slotObj.box, "background", "transparent");
+    S(slotObj.box, "borderStyle", "solid");
+    S(slotObj.box, "borderColor", "transparent");
+    S(slotObj.box, "color", "#1d1d1f");
+  }
+  S(slotObj.call, "opacity", P4(callOp));
+  S(slotObj.call, "transform", "translate(-50%, 0)");
+}
+
+function setFlyPill(el, vis, x, y, op, txt, theme) {
+  S(el, "visibility", vis ? "visible" : "hidden");
+  if (!vis) return;
+  if (el.textContent !== txt) el.textContent = txt;
+  const pal = theme === "red"
+    ? ["#ffe4e6", "#e11d48", "#be123c"]
+    : theme === "blue"
+    ? ["#e0f2fe", "#0284c7", "#0369a1"]
+    : ["#dcfce7", "#16a34a", "#15803d"];
+  S(el, "background", pal[0]);
+  S(el, "borderColor", pal[1]);
+  S(el, "color", pal[2]);
+  S(el, "opacity", P4(op));
+  S(el, "transform", `translate(${P4(x)}px,${P4(y)}px) translate(-50%,-50%)`);
+}
+
+// =============================================================================
+// Pure-Time Deterministic Renderer seek(t) — Zero-Jitter Stabilized Edition
+// =============================================================================
+const domHeader = document.getElementById("header");
+const PX = (v) => (Number.isInteger(v) ? v : P4(v)) + "px";
+
+function seek(rawT) {
+  const t = clamp(rawT, 0, DUR);
+
+  // 1. Constant Studio Canvas (#f5f5f7 — Zero Full-Screen H.264 Background Pumping)
+  S(stage, "background", "#f5f5f7");
+
+  // 2. Minimalist Single-Focus Header + Fixed-Width Tabular Millisecond HUD
+  const hdrVis = smooth(seg(t, 0.02, 0.30)) * (1 - smooth(seg(t, 36.05, 36.40)));
+  if (hdrVis >= 0.9999) {
+    S(domHeader, "opacity", "1");
+    S(domHeader, "transform", "none");
+  } else {
+    S(domHeader, "opacity", P4(hdrVis));
+    S(domHeader, "transform", `translate(0px,${P4((1 - hdrVis) * -14)}px)`);
+  }
+
+  const gwMs = gatewayMsAt(t);
+  let msL = "客户端输入中", msPre = "无需多余操作", msNum = "", msC = "#8e8e93";
+  if (t >= 2.90 && t < 11.15) {
+    msL = "硬件流式透明拦截"; msPre = "网关耗时"; msNum = gwMs.toFixed(1); msC = "#e11d48";
+  } else if (t >= 11.15 && t < 13.50) {
+    msL = "脱敏请求外发云端"; msPre = "网关累计"; msNum = gwMs.toFixed(1); msC = "#0284c7";
+  } else if (t >= 13.50 && t < 17.56) {
+    msL = "密码簿内网隔离 · 云端思考推理"; msPre = "网关累计"; msNum = "8.4"; msC = "#0284c7";
+  } else if (t >= 17.56 && t < 21.55) {
+    msL = "云端返回 Tool Use 响应"; msPre = "网关累计"; msNum = "8.4"; msC = "#16a34a";
+  } else if (t >= 21.55 && t < 29.50) {
+    msL = "硬件流式解密还原"; msPre = "网关耗时"; msNum = gwMs.toFixed(1); msC = "#16a34a";
+  } else if (t >= 29.50) {
+    msL = "全程零手动干预闭环"; msPre = "网关总耗时"; msNum = "16.8"; msC = "#15803d";
+  }
+  if (domMsLabel.textContent !== msL) domMsLabel.textContent = msL;
+  if (domMsPre.textContent !== msPre) domMsPre.textContent = msPre;
+  if (msNum) {
+    S(domMsNum, "display", "inline-block");
+    S(domMsSuf, "display", "inline");
+    if (domMsNum.textContent !== msNum) domMsNum.textContent = msNum;
+  } else {
+    S(domMsNum, "display", "none");
+    S(domMsSuf, "display", "none");
+  }
+  S(domMsDot, "background", msC);
+
+  for (const hn of headNodes) {
+    const on = t >= hn.tIn - 0.05 && t <= hn.tOut + 0.28;
+    S(hn.el, "visibility", on ? "visible" : "hidden");
+    if (!on) continue;
+    const kIn = springStep(t - hn.tIn, 14);
+    const kOut = easeInOut(seg(t, hn.tOut - 0.14, hn.tOut + 0.18));
+    if (kIn === 1 && kOut === 0) {
+      S(hn.titleEl, "transform", "none");
+      S(hn.titleEl, "opacity", "1");
+    } else {
+      const yPct = (1 - kIn) * 108 - kOut * 108;
+      S(hn.titleEl, "transform", `translate(0,${P4(yPct)}%)`);
+      S(hn.titleEl, "opacity", P4(clamp(kIn * 1.3) * (1 - kOut)));
+    }
+  }
+
+  // 3. Central Card (#mainCard) — Pure Integer left/top/width/height, Zero CSS Transform Ever
+  const mcHide3  = smooth(seg(t, 11.12, 11.36)) * (1 - smooth(seg(t, 21.54, 21.78)));
+  const mcHide4B = smooth(seg(t, 26.32, 26.62)) * (1 - smooth(seg(t, 29.46, 29.72)));
+  const mcHideFin = smooth(seg(t, 36.10, 36.42));
+  const focusDim2C = smooth(seg(t, 6.32, 6.60)) * (1 - smooth(seg(t, 8.02, 8.28)));
+  const focusDim4A = smooth(seg(t, 23.50, 23.75)) * (1 - smooth(seg(t, 24.38, 24.62)));
+  const mcOp = (1 - mcHide3) * (1 - mcHide4B) * (1 - mcHideFin) * (1 - 0.46 * focusDim2C - 0.42 * focusDim4A);
+
+  S(domMainCard, "visibility", mcOp > 0.004 ? "visible" : "hidden");
+  if (mcOp > 0.004) {
+    const mb = morphBox(t, L.clientIn, MAIN_CARD_STATES);
+    S(domMainCard, "left", PX(mb.cx - mb.w / 2));
+    S(domMainCard, "top", PX(mb.cy - mb.h / 2));
+    S(domMainCard, "width", PX(mb.w));
+    S(domMainCard, "height", PX(mb.h));
+    S(domMainCard, "transform", "none");
+    S(domMainCard, "opacity", mcOp >= 0.9999 ? "1" : P4(mcOp));
+    S(domMcShell, "borderRadius", PX(mb.rad));
+    S(domMcShell, "background", "#ffffff");
+    S(domMcShell, "borderColor", "rgba(29,29,31,0.09)");
+  }
+
+  // 4. Dedicated Physical Hardware Unit: 脱敏网关 (#gwUnit · Pure Integer left/top/width/height)
+  const gwVisMain = smooth(seg(t, 2.95, 3.30)) * (1 - smooth(seg(t, 26.22, 26.52)));
+  const gwVisFn   = smooth(seg(t, 36.15, 36.55));
+  const gwDim2A   = smooth(seg(t, 3.20, 3.45)) * (1 - smooth(seg(t, 4.55, 4.80)));
+  const gwOp = clamp(gwVisMain + gwVisFn) * (1 - 0.35 * gwDim2A);
+
+  S(domGwUnit, "visibility", gwOp > 0.004 ? "visible" : "hidden");
+  if (gwOp > 0.004) {
+    const gx = track(t, L.gwWork[0], [
+      [11.18, L.gwCloud[0],  12.5],
+      [21.52, L.gwDec[0],    13.0],
+      [36.10, L.gwFinale[0], 12.0]
+    ]);
+    const gy = track(t, L.gwWork[1], [
+      [11.18, L.gwCloud[1],  12.5],
+      [21.52, L.gwDec[1],    13.0],
+      [36.10, L.gwFinale[1], 12.0]
+    ]);
+    const gw = track(t, L.gwWork[2], [
+      [11.18, L.gwCloud[2],  12.5],
+      [21.52, L.gwDec[2],    13.0],
+      [36.10, L.gwFinale[2], 12.0]
+    ]);
+    const gh = track(t, L.gwWork[3], [
+      [11.18, L.gwCloud[3],  12.5],
+      [21.52, L.gwDec[3],    13.0],
+      [36.10, L.gwFinale[3], 12.0]
+    ]);
+    S(domGwUnit, "left", PX(gx - gw / 2));
+    S(domGwUnit, "top", PX(gy - gh / 2));
+    S(domGwUnit, "width", PX(gw));
+    S(domGwUnit, "height", PX(gh));
+    S(domGwUnit, "transform", "none");
+    S(domGwUnit, "opacity", gwOp >= 0.9999 ? "1" : P4(gwOp));
+    const gwLblOp = 1 - smooth(seg(t, 36.05, 36.30));
+    S(domGwLabel, "opacity", gwLblOp >= 0.9999 ? "1" : P4(gwLblOp));
+    let gwPillStr = "脱敏网关 · 流式透明拦截", gwPillBg = "rgba(29,29,31,0.88)", gwPillCol = "#f5f5f7";
+    if (t >= 4.68 && t <= 6.36) {
+      gwPillStr = "脱敏网关 · 提取敏感凭据"; gwPillBg = "#e11d48"; gwPillCol = "#ffffff";
+    } else if (t > 6.36 && t < 8.18) {
+      gwPillStr = "脱敏网关 · AES 加密生成代号"; gwPillBg = "#6d28d9"; gwPillCol = "#ffffff";
+    } else if (t >= 8.18 && t < 11.40) {
+      gwPillStr = "脱敏网关 · 脱敏代号回填原文"; gwPillBg = "#0284c7"; gwPillCol = "#ffffff";
+    } else if (t >= 11.40 && t < 13.55) {
+      gwPillStr = "脱敏网关 · 外发脱敏请求"; gwPillBg = "#0284c7"; gwPillCol = "#ffffff";
+    } else if (t >= 13.55 && t < 17.85) {
+      gwPillStr = "脱敏网关 · 内网边界守卫中"; gwPillBg = "rgba(29,29,31,0.88)"; gwPillCol = "#f5f5f7";
+    } else if (t >= 17.85 && t < 22.22) {
+      gwPillStr = "脱敏网关 · 接收云端响应"; gwPillBg = "#15803d"; gwPillCol = "#ffffff";
+    } else if (t >= 22.22 && t <= 23.62) {
+      gwPillStr = "脱敏网关 · 提取脱敏代号查表"; gwPillBg = "#0284c7"; gwPillCol = "#ffffff";
+    } else if (t > 23.62 && t < 24.48) {
+      gwPillStr = "脱敏网关 · 密码簿解密命中"; gwPillBg = "#15803d"; gwPillCol = "#ffffff";
+    } else if (t >= 24.48 && t <= 26.52) {
+      gwPillStr = "脱敏网关 · 真实凭据回填命令"; gwPillBg = "#15803d"; gwPillCol = "#ffffff";
+    }
+    if (gwLabelTxt.textContent !== gwPillStr) gwLabelTxt.textContent = gwPillStr;
+    S(domGwLabel, "background", gwPillBg);
+    S(domGwLabel, "color", gwPillCol);
+
+    const haloRgb = t < 11.15 ? "225,29,72" : t < 17.85 ? "2,132,199" : "22,163,74";
+    S(domLedCore, "boxShadow", `0 0 6px rgba(${haloRgb},0.95)`);
+    S(domLedHalo, "background", `radial-gradient(circle, rgba(${haloRgb},0.40) 0%, rgba(${haloRgb},0) 72%)`);
+  }
+
+  // 5. Unified Dynamic-Focus Codebook (#vaultBox — Exact Integer left/top at 1x, Zero Half-Pixel Blur)
+  const vbIn  = smooth(seg(t, 2.98, 3.36));
+  const vbOut = smooth(seg(t, 29.25, 29.56));
+  const vbDim2A = smooth(seg(t, 3.20, 3.45)) * (1 - smooth(seg(t, 4.55, 4.80)));
+  const vbMiniDim = smooth(seg(t, 11.35, 11.75)) * (1 - smooth(seg(t, 21.45, 21.75)));
+  const vbOp = vbIn * (1 - vbOut) * (1 - 0.42 * vbDim2A - 0.12 * vbMiniDim);
+
+  S(vaultBox, "visibility", vbOp > 0.004 ? "visible" : "hidden");
+  if (vbOp > 0.004) {
+    const vx = track(t, L.vaultWork[0], [
+      [11.18, L.vaultMini[0], 12.5],
+      [21.56, L.vaultDec[0],  12.5],
+      [26.35, L.vaultHero[0], 13.0]
+    ]);
+    const vy = track(t, L.vaultWork[1], [
+      [11.18, L.vaultMini[1], 12.5],
+      [21.56, L.vaultDec[1],  12.5],
+      [26.35, L.vaultHero[1], 13.0]
+    ]);
+    const vs = track(t, 1.0, [
+      [11.18, L.vaultMiniScale, 12.5],
+      [21.56, 1.00,             12.5],
+      [26.35, L.vaultHeroScale, 13.0]
+    ]);
+
+    const collapseK = springStep(t - 28.30, 13);
+    const curActH = lerp(M.actFullH, 48, collapseK);
+    const curVaultH = M.vaultH - (M.actFullH - curActH);
+    const vLeft = vx - (L.vaultW * vs) / 2;
+    const vTop  = vy - (curVaultH * vs) / 2;
+
+    S(vaultBox, "height", PX(curVaultH));
+    if (vs === 1) {
+      S(vaultBox, "left", Math.round(vLeft) + "px");
+      S(vaultBox, "top", Math.round(vTop) + "px");
+      S(vaultBox, "transform", "none");
+    } else {
+      const settledScale = (vs === L.vaultMiniScale || vs === L.vaultHeroScale) && (collapseK === 0 || collapseK === 1);
+      const sx = settledScale ? Math.round(vLeft) : P4(vLeft);
+      const sy = settledScale ? Math.round(vTop) : P4(vTop);
+      S(vaultBox, "left", "0px");
+      S(vaultBox, "top", "0px");
+      S(vaultBox, "transform", `translate(${sx}px,${sy}px) scale(${P4(vs)})`);
+    }
+    S(vaultBox, "opacity", vbOp >= 0.9999 ? "1" : P4(vbOp));
+
+    const miniTagOp = smooth(seg(t, 11.72, 12.00)) * (1 - smooth(seg(t, 21.38, 21.60)));
+    S(domMiniBadge, "visibility", miniTagOp > 0.005 ? "visible" : "hidden");
+    if (miniTagOp > 0.005) {
+      S(domMiniBadge, "opacity", P4(miniTagOp));
+    }
+
+    let bTxt = "等待提取敏感凭据…", bBg = "#f2f2f7", bCol = "#515154";
+    if (t >= 4.75 && t < 6.38) {
+      bTxt = "已接收 3 项敏感凭据"; bBg = "#ffe4e6"; bCol = "#be123c";
+    } else if (t >= 6.38 && t < 8.20) {
+      bTxt = "AES-256 加密 · 生成脱敏代号"; bBg = "#ede9fe"; bCol = "#6d28d9";
+    } else if (t >= 8.20 && t < 21.56) {
+      bTxt = "✓ 3 项映射内网留存"; bBg = "#e0f2fe"; bCol = "#0369a1";
+    } else if (t >= 21.56 && t < 26.35) {
+      bTxt = "命中映射 · 解密还原真实凭据"; bBg = "#dcfce7"; bCol = "#15803d";
+    } else if (t >= 26.35 && t < 28.35) {
+      bTxt = "用完即焚 · 正在销毁映射"; bBg = "#ffe4e6"; bCol = "#be123c";
+    } else if (t >= 28.35) {
+      bTxt = "✓ 本次映射已销毁 · 0 残留"; bBg = "#dcfce7"; bCol = "#15803d";
+    }
+    if (vbBadge.textContent !== bTxt) vbBadge.textContent = bTxt;
+    S(vbBadge, "background", bBg);
+    S(vbBadge, "color", bCol);
+
+    S(vbActiveWrap, "height", PX(curActH));
+    const sealOp = smooth(seg(t, 28.36, 28.72));
+    S(vbClearedSeal, "opacity", sealOp >= 0.9999 ? "1" : sealOp <= 0.0001 ? "0" : P4(sealOp));
+
+    vbRows.forEach((r, idx) => {
+      const stg = idx * 0.14;
+      const landedRed   = t >= 5.82 + stg;
+      const lockedVio   = smooth(seg(t, 6.45 + stg, 6.82 + stg));
+      const mintedBlu   = smooth(seg(t, 7.18 + stg, 7.55 + stg));
+      const decUnlocked = smooth(seg(t, 23.55 + stg, 23.92 + stg));
+
+      const tShatter = 27.05 + idx * 0.24;
+      const dtS = t - tShatter;
+
+      S(r.rowEl, "opacity", dtS > 0.95 ? "0" : "1");
+
+      if (!landedRed) {
+        S(r.plainEl, "background", "#f8fafc");
+        S(r.plainEl, "borderStyle", "dashed");
+        S(r.plainEl, "borderColor", "#cbd5e1");
+        S(r.plainEl, "color", "transparent");
+      } else if (decUnlocked > 0.4) {
+        S(r.plainEl, "background", "#dcfce7");
+        S(r.plainEl, "borderStyle", "solid");
+        S(r.plainEl, "borderColor", "#16a34a");
+        S(r.plainEl, "color", "#15803d");
+      } else {
+        S(r.plainEl, "background", "#ffe4e6");
+        S(r.plainEl, "borderStyle", "solid");
+        S(r.plainEl, "borderColor", "#fb7185");
+        S(r.plainEl, "color", "#be123c");
+      }
+
+      if (lockedVio <= 0.02) {
+        S(r.cipherEl, "background", "#f8fafc");
+        S(r.cipherEl, "borderStyle", "dashed");
+        S(r.cipherEl, "borderColor", "#e2e8f0");
+        S(r.cipherEl, "color", "transparent");
+        S(r.cipherEl, "opacity", "1");
+      } else {
+        S(r.cipherEl, "background", "#ede9fe");
+        S(r.cipherEl, "borderStyle", "solid");
+        S(r.cipherEl, "borderColor", "#a78bfa");
+        S(r.cipherEl, "color", "#6d28d9");
+        S(r.cipherEl, "opacity", P4(lockedVio));
+      }
+
+      if (mintedBlu <= 0.02) {
+        S(r.maskEl, "background", "#f8fafc");
+        S(r.maskEl, "borderStyle", "dashed");
+        S(r.maskEl, "borderColor", "#e2e8f0");
+        S(r.maskEl, "color", "transparent");
+        S(r.maskEl, "opacity", "1");
+      } else {
+        S(r.maskEl, "background", "#e0f2fe");
+        S(r.maskEl, "borderStyle", "solid");
+        S(r.maskEl, "borderColor", "#38bdf8");
+        S(r.maskEl, "color", "#0369a1");
+        S(r.maskEl, "opacity", P4(mintedBlu));
+      }
+
+      S(r.arrA, "color", lockedVio > 0.3 ? "#6d28d9" : "#cbd5e1");
+      S(r.arrB, "color", mintedBlu > 0.3 ? "#0284c7" : "#cbd5e1");
+
+      const bgFade = 1 - smooth(seg(dtS, -0.02, 0.16));
+      S(r.bgEl, "opacity", P4(bgFade));
+      if (bgFade > 0.01) {
+        const preWarn = smooth(seg(dtS, -0.18, -0.01));
+        S(r.bgEl, "background", preWarn > 0.2 ? "#ffe4e6" : decUnlocked > 0.4 ? "#f0fdf4" : "#fafafa");
+        S(r.bgEl, "borderColor", preWarn > 0.2 ? "#e11d48" : decUnlocked > 0.4 ? "#86efac" : "rgba(29,29,31,0.09)");
+      }
+      const crackOp = smooth(seg(dtS, -0.15, -0.02)) * (1 - smooth(seg(dtS, 0.03, 0.20)));
+      S(r.crackEl, "opacity", P4(crackOp));
+
+      if (dtS <= 0) {
+        for (let ci = 0; ci < r.chars.length; ci++) {
+          S(r.chars[ci].el, "transform", "none");
+          S(r.chars[ci].el, "opacity", "1");
+        }
+        for (let ki = 0; ki < r.chips.length; ki++) S(r.chips[ki].el, "opacity", "0");
+      } else if (dtS < 0.96) {
+        if (dtS > 0.04) {
+          S(r.plainEl, "background", "transparent"); S(r.plainEl, "borderColor", "transparent");
+          S(r.cipherEl, "background", "transparent"); S(r.cipherEl, "borderColor", "transparent");
+          S(r.maskEl, "background", "transparent"); S(r.maskEl, "borderColor", "transparent");
+        }
+        const k = clamp(dtS / 0.85);
+        const burst = 1 - Math.pow(1 - k, 2.3);
+        const grav = 155 * dtS * dtS;
+        const chOp = 1 - smooth(seg(k, 0.18, 0.96));
+        const sc = lerp(1.06, 0.20, smooth(k));
+
+        for (let ci = 0; ci < r.chars.length; ci++) {
+          const c = r.chars[ci];
+          S(c.el, "transform", `translate(${P4(c.vx * burst)}px,${P4(c.vy * burst + grav)}px) rotate(${P4(c.rot * burst)}deg) scale(${P4(sc)})`);
+          S(c.el, "opacity", P4(chOp));
+        }
+        const chipOp = smooth(seg(dtS, 0, 0.06)) * (1 - smooth(seg(dtS, 0.24, 0.76)));
+        for (let ki = 0; ki < r.chips.length; ki++) {
+          const cp = r.chips[ki];
+          S(cp.el, "opacity", P4(chipOp));
+          S(cp.el, "transform", `translate(${P4(cp.vx * burst)}px,${P4(cp.vy * burst + grav * 0.82)}px) rotate(${P4(cp.rot * burst)}deg) scale(${P4(1 - k * 0.6)})`);
+        }
+      }
+    });
+  }
+
+  // 6. Scene 3 Top-Anchored Progressive Cloud Terminal (#cloudOutCard: 11.40 - 21.56s)
+  // Top-left integer coordinates NEVER move 1px while height smoothly expands downward!
+  const coVis = smooth(seg(t, 11.40, 11.78)) * (1 - smooth(seg(t, 21.28, 21.56)));
+  S(cloudOutCard, "visibility", coVis > 0.004 ? "visible" : "hidden");
+  if (coVis > 0.004) {
+    const curCloudH = track(t, M.cloudH1, [
+      [13.45, M.cloudH2, 12.5],
+      [17.55, M.cloudH3, 12.5]
+    ]);
+    S(cloudOutCard, "height", PX(curCloudH));
+    S(cloudOutCard, "opacity", coVis >= 0.9999 ? "1" : P4(coVis));
+
+    let cbTxt = "仅见脱敏代号 · 0 明文", cbBg = "rgba(56,189,248,0.16)", cbCol = "#7dd3fc", cbBd = "rgba(56,189,248,0.35)";
+    if (t >= 13.45 && t < 16.05) {
+      cbTxt = "深度思考推理中…"; cbBg = "rgba(167,139,250,0.18)"; cbCol = "#c4b5fd"; cbBd = "rgba(167,139,250,0.42)";
+    } else if (t >= 16.05 && t < 17.55) {
+      cbTxt = "✓ 推理完成 · 0 明文接触"; cbBg = "rgba(56,189,248,0.16)"; cbCol = "#7dd3fc"; cbBd = "rgba(56,189,248,0.35)";
+    } else if (t >= 17.55) {
+      cbTxt = "✓ 已返回 Tool Use 诊断命令"; cbBg = "rgba(48,209,88,0.16)"; cbCol = "#4ade80"; cbBd = "rgba(48,209,88,0.38)";
+    }
+    if (domCoBadge.textContent !== cbTxt) domCoBadge.textContent = cbTxt;
+    S(domCoBadge, "background", cbBg);
+    S(domCoBadge, "color", cbCol);
+    S(domCoBadge, "borderColor", cbBd);
+
+    // Pure-opacity stationary inner reveals (zero vertical text motion inside expanding drawer!)
+    const thinkOn = smooth(seg(t, 13.52, 13.86));
+    const retOn   = smooth(seg(t, 17.62, 17.98));
+    S(domCoReq, "opacity", P4(1 - 0.16 * thinkOn));
+    S(domCoThink, "opacity", P4(thinkOn * (1 - 0.08 * retOn)));
+
+    let cotMetaStr = "正在解析连接配置…";
+    if (t >= 14.60 && t < 15.60) cotMetaStr = "正在规划排障查询…";
+    else if (t >= 15.60) cotMetaStr = "✓ 3 步逻辑推导完成 · 零明文接触";
+    if (domCotMeta.textContent !== cotMetaStr) domCotMeta.textContent = cotMetaStr;
+
+    for (let si = 0; si < 3; si++) {
+      const tStep = 13.72 + si * 0.90;
+      const sk = smooth(seg(t, tStep, tStep + 0.36));
+      S(domCotSteps[si], "opacity", P4(sk));
+    }
+
+    S(domCoRet, "opacity", P4(retOn));
+  }
+
+  // 7. Inner Views Inside #mainCard
+  if (applyView(v1, t, 0.02, 2.88)) {
+    const total = v1Chars.length;
+    const typed = Math.round(seg(t, 0.20, 1.62) * total);
+    for (let i = 0; i < total; i++) {
+      S(v1Chars[i], "display", i < typed ? "inline" : "none");
+    }
+    const blink = t < 1.68 || Math.floor(t * 3.2) % 2 === 0;
+    const onLine1 = t > 0.16 && typed <= v1Line1Len;
+    const onLine2 = typed > v1Line1Len && t < 2.38;
+    S(caret1, "display", (onLine1 && blink) ? "inline-block" : "none");
+    S(caret2, "display", (onLine2 && blink) ? "inline-block" : "none");
+
+    const sendPress = Math.sin(Math.PI * seg(t, 2.30, 2.46));
+    S(sendBtn, "transform", sendPress <= 0.0001 ? "none" : `scale(${P4(1 - sendPress * 0.08)})`);
+  }
+
+  if (applyView(v2, t, 2.92, 11.16)) {
+    const hiK = smooth(seg(t, 3.32, 3.72));
+    const dimSurround = smooth(seg(t, 3.35, 3.75)) * (1 - smooth(seg(t, 9.70, 10.10)));
+    v2Dims.forEach((el) => S(el, "opacity", P4(1 - 0.38 * dimSurround)));
+
+    for (let i = 0; i < 3; i++) {
+      const stg = i * 0.14;
+      const lifted  = t >= 4.82 + stg;
+      const landedB = t >= 9.36 + stg;
+      if (!lifted) {
+        const callOp = hiK * (1 - smooth(seg(t, 4.70 + stg, 4.84 + stg)));
+        setSlotStyle(encSlotEls[i], hiK > 0.25 ? "red" : "plain", ENT[i].real, callOp);
+      } else if (!landedB) {
+        setSlotStyle(encSlotEls[i], "empty", "· 待回填 ·", 0);
+      } else {
+        setSlotStyle(encSlotEls[i], "blue", ENT[i].mask, 0);
+      }
+    }
+
+    let st = "已识别 3 处敏感凭据", sBg = "#ffe4e6", sCol = "#be123c";
+    if (t >= 4.75 && t < 6.38) { st = "正在提取敏感凭据…"; }
+    else if (t >= 6.38 && t < 8.20) { st = "正在加密并生成脱敏代号…"; sBg = "#ede9fe"; sCol = "#6d28d9"; }
+    else if (t >= 8.20 && t < 9.65) { st = "脱敏代号正在回填原文…"; sBg = "#e0f2fe"; sCol = "#0369a1"; }
+    else if (t >= 9.65) { st = "✓ 脱敏替换完成 · 准备发往云端"; sBg = "#dcfce7"; sCol = "#15803d"; }
+    if (v2StatusPill.textContent !== st) v2StatusPill.textContent = st;
+    S(v2StatusPill, "background", sBg);
+    S(v2StatusPill, "color", sCol);
+  }
+
+  S(v3, "visibility", "hidden");
+
+  if (applyView(v4, t, 21.58, 26.34)) {
+    const hiB = smooth(seg(t, 21.92, 22.25));
+    for (let i = 0; i < 3; i++) {
+      const stg = i * 0.14;
+      const sentDown = t >= 22.38 + stg;
+      const landedG  = t >= 25.62 + stg;
+      if (!sentDown) {
+        const callOp = hiB * (1 - smooth(seg(t, 22.26 + stg, 22.40 + stg)));
+        setSlotStyle(decSlotEls[i], "blue", ENT[i].mask, callOp);
+      } else if (!landedG) {
+        setSlotStyle(decSlotEls[i], "empty", "· 待还原 ·", 0);
+      } else {
+        setSlotStyle(decSlotEls[i], "green", ENT[i].real, 0);
+      }
+    }
+
+    let ds = "检测到 3 处脱敏代号", dBg = "#e0f2fe", dCol = "#0369a1";
+    if (t >= 22.32 && t < 23.55) { ds = "正在送入密码簿比对…"; }
+    else if (t >= 23.55 && t < 24.50) { ds = "密码簿解密命中真实凭据"; dBg = "#dcfce7"; dCol = "#15803d"; }
+    else if (t >= 24.50 && t < 25.85) { ds = "真实凭据正在回填命令…"; dBg = "#dcfce7"; dCol = "#15803d"; }
+    else if (t >= 25.85) { ds = "✓ 真实凭据回填完毕"; dBg = "#dcfce7"; dCol = "#15803d"; }
+    if (v4StatusPill.textContent !== ds) v4StatusPill.textContent = ds;
+    S(v4StatusPill, "background", dBg);
+    S(v4StatusPill, "color", dCol);
+  }
+
+  applyView(v5, t, 29.52, 32.08);
+  if (applyView(v6, t, 32.12, 36.12)) {
+    const numK = easeInOut(seg(t, 32.30, 33.15));
+    const valStr = lerp(0.0, 16.8, numK).toFixed(1);
+    if (speedNum.textContent !== valStr) speedNum.textContent = valStr;
+  }
+
+  // 8. Clean Two-Segment Gateway Arrows + Stationary-Pill Cloud Link (#arrowSvg) + Flying Pills
+  let svgHtml = "";
+  S(domRunwayBadge, "visibility", "hidden");
+  setFlyPill(domFly[0], false); setFlyPill(domFly[1], false); setFlyPill(domFly[2], false);
+
+  const renderGatewayWave = (tDrawStart, tFlyStart, tFadeStart, uriSlots, vaultCells, gwSpec, vaultCy, dirDown, strokeCol, theme) => {
+    const fadeOut = 1 - smooth(seg(t, tFadeStart, tFadeStart + 0.34));
+    const gwTopY = gwSpec[1] - gwSpec[3] / 2 - 8;
+    const gwBotY = gwSpec[1] + gwSpec[3] / 2 + 9;
+    const vTopY  = vaultCy - M.vaultH / 2 - 8;
+
+    for (let i = 0; i < 3; i++) {
+      const stg = i * 0.14;
+      const drawU = easeInOut(seg(t, tDrawStart + stg, tDrawStart + 0.46 + stg));
+      if (drawU > 0.005 && fadeOut > 0.005) {
+        const uSlot = uriSlots[i];
+        const gwPortX = gwSpec[0] + (i - 1) * 115;
+        const p0 = dirDown ? [uSlot.cx, uSlot.bottom + 6] : [gwPortX, gwTopY];
+        const p3 = dirDown ? [gwPortX, gwTopY] : [uSlot.cx, uSlot.bottom + 8];
+        const midY = (p0[1] + p3[1]) / 2;
+        const p1 = [p0[0], lerp(p0[1], midY, 0.80)];
+        const p2 = [p3[0], lerp(p3[1], midY, 0.80)];
+
+        const pb = partialBezier(p0, p1, p2, p3, drawU);
+        const aOp = fadeOut * clamp(drawU * 2.5);
+        svgHtml += `<path d="${pb.d}" fill="none" stroke="${strokeCol}" stroke-width="3" stroke-linecap="round" stroke-dasharray="7 5" opacity="${P4(aOp * 0.88)}"/>`;
+        svgHtml += `<polygon points="0,0 -11,-5.5 -8.5,0 -11,5.5" fill="${strokeCol}" opacity="${P4(aOp)}" transform="translate(${P4(pb.tip[0])},${P4(pb.tip[1])}) rotate(${P4(pb.ang)})"/>`;
+      }
+
+      const flyRaw = seg(t, tFlyStart + stg, tFlyStart + 1.02 + stg);
+      if (flyRaw > 0.002 && flyRaw < 0.998) {
+        const uFly = easeInOut(flyRaw);
+        const s = dirDown ? uriSlots[i] : vaultCells[i];
+        const e = dirDown ? vaultCells[i] : uriSlots[i];
+        const fp0 = [s.cx, s.cy], fp3 = [e.cx, e.cy];
+        const fMidY = gwSpec[1];
+        const gwPortX = gwSpec[0] + (i - 1) * 95;
+        const fp1 = [lerp(fp0[0], gwPortX, 0.7), lerp(fp0[1], fMidY, 0.65)];
+        const fp2 = [lerp(fp3[0], gwPortX, 0.7), lerp(fp3[1], fMidY, 0.65)];
+        const fp = partialBezier(fp0, fp1, fp2, fp3, uFly).tip;
+        const txt = theme === "blue" ? ENT[i].mask : ENT[i].real;
+        setFlyPill(domFly[i], true, fp[0], fp[1], 1, txt, theme);
+      }
+    }
+
+    const busU = easeInOut(seg(t, tDrawStart + 0.18, tDrawStart + 0.55));
+    if (busU > 0.01 && fadeOut > 0.005) {
+      const bp0 = dirDown ? [gwSpec[0], gwBotY] : [gwSpec[0], vTopY];
+      const bp3 = dirDown ? [gwSpec[0], vTopY]  : [gwSpec[0], gwBotY];
+      const bTipY = lerp(bp0[1], bp3[1], busU);
+      const bAng = dirDown ? 90 : -90;
+      const bOp = fadeOut * clamp(busU * 2.5);
+      svgHtml += `<line x1="${gwSpec[0]}" y1="${P4(bp0[1])}" x2="${gwSpec[0]}" y2="${P4(bTipY)}" stroke="${strokeCol}" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 4" opacity="${P4(bOp * 0.88)}"/>`;
+      svgHtml += `<polygon points="0,0 -10,-5 -8,0 -10,5" fill="${strokeCol}" opacity="${P4(bOp)}" transform="translate(${gwSpec[0]},${P4(bTipY)}) rotate(${bAng})"/>`;
+    }
+  };
+
+  if (t >= 4.68 && t <= 6.36) {
+    renderGatewayWave(4.70, 4.82, 6.00, M.encSlots, M.vEncPlain, L.gwWork, L.vaultWork[1], true, "#e11d48", "red");
+  } else if (t >= 8.18 && t <= 10.15) {
+    renderGatewayWave(8.20, 8.36, 9.75, M.encSlots, M.vEncMask, L.gwWork, L.vaultWork[1], false, "#0284c7", "blue");
+  } else if (t >= 11.50 && t <= 21.40) {
+    const cOp = smooth(seg(t, 11.55, 11.88)) * (1 - smooth(seg(t, 21.15, 21.40)));
+    const outOp = smooth(seg(t, 11.55, 11.82)) * (1 - smooth(seg(t, 13.28, 13.55)));
+    const retOp = smooth(seg(t, 17.85, 18.12)) * (1 - smooth(seg(t, 21.12, 21.40)));
+    const isRet = t >= 17.85;
+    const lCol = isRet ? "#16a34a" : "#0284c7";
+    const lineOp = cOp * Math.max(0.30, 0.84 * Math.max(outOp, retOp));
+
+    if (P) {
+      const y1 = 536, y2 = L.cloudOutTop - 14, midY = Math.round((y1 + y2) / 2);
+      svgHtml = `<line x1="${CX}" y1="${y1}" x2="${CX}" y2="${y2}" stroke="${lCol}" stroke-width="3" stroke-dasharray="7 5" opacity="${P4(lineOp)}"/>`;
+      if (outOp > 0.005) {
+        const u0 = ((t - 11.55) * 1.05) % 1;
+        const u1 = ((t - 11.55) * 1.05 + 0.5) % 1;
+        const py0 = lerp(y1 + 6, y2 - 12, u0), py1 = lerp(y1 + 6, y2 - 12, u1);
+        svgHtml += `
+          <circle cx="${CX}" cy="${P4(py0)}" r="4.5" fill="${lCol}" opacity="${P4(outOp * Math.sin(Math.PI * u0))}"/>
+          <circle cx="${CX}" cy="${P4(py1)}" r="4.5" fill="${lCol}" opacity="${P4(outOp * Math.sin(Math.PI * u1))}"/>
+          <polygon points="${CX},${y2} ${CX - 6},${y2 - 12} ${CX + 6},${y2 - 12}" fill="${lCol}" opacity="${P4(outOp)}"/>
+          <rect x="${CX - 60}" y="${midY - 14}" width="120" height="28" rx="14" fill="${lCol}" opacity="${P4(outOp)}"/>
+          <text x="${CX}" y="${midY + 4.5}" text-anchor="middle" fill="#ffffff" font-family="-apple-system,sans-serif" font-size="12" font-weight="700" opacity="${P4(outOp)}">TLS 1.3 脱敏流</text>
+        `;
+      } else if (retOp > 0.005) {
+        const u0 = ((t - 17.85) * 0.95) % 1;
+        const u1 = ((t - 17.85) * 0.95 + 0.5) % 1;
+        const py0 = lerp(y2 - 6, y1 + 12, u0), py1 = lerp(y2 - 6, y1 + 12, u1);
+        svgHtml += `
+          <circle cx="${CX}" cy="${P4(py0)}" r="4.5" fill="${lCol}" opacity="${P4(retOp * Math.sin(Math.PI * u0))}"/>
+          <circle cx="${CX}" cy="${P4(py1)}" r="4.5" fill="${lCol}" opacity="${P4(retOp * Math.sin(Math.PI * u1))}"/>
+          <polygon points="${CX},${y1} ${CX - 6},${y1 + 12} ${CX + 6},${y1 + 12}" fill="${lCol}" opacity="${P4(retOp)}"/>
+          <rect x="${CX - 66}" y="${midY - 14}" width="132" height="28" rx="14" fill="${lCol}" opacity="${P4(retOp)}"/>
+          <text x="${CX}" y="${midY + 4.5}" text-anchor="middle" fill="#ffffff" font-family="-apple-system,sans-serif" font-size="12" font-weight="700" opacity="${P4(retOp)}">Tool Use 响应</text>
+        `;
+      }
+    } else {
+      const x1 = L.gwCloud[0] + L.gwCloud[2] / 2 + 14; // 614
+      const x2 = L.cloudOutLeft - 14;                 // 862
+      const midX = Math.round((x1 + x2) / 2);         // 738 (exact integer!)
+      const y = L.gwCloud[1];                         // 420 (exact integer!)
+      svgHtml = `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="${lCol}" stroke-width="3" stroke-dasharray="7 5" opacity="${P4(lineOp)}"/>`;
+      if (outOp > 0.005) {
+        const u0 = ((t - 11.55) * 1.05) % 1;
+        const u1 = ((t - 11.55) * 1.05 + 0.5) % 1;
+        const px0 = lerp(x1 + 6, x2 - 12, u0), px1 = lerp(x1 + 6, x2 - 12, u1);
+        svgHtml += `
+          <circle cx="${P4(px0)}" cy="${y}" r="4.5" fill="${lCol}" opacity="${P4(outOp * Math.sin(Math.PI * u0))}"/>
+          <circle cx="${P4(px1)}" cy="${y}" r="4.5" fill="${lCol}" opacity="${P4(outOp * Math.sin(Math.PI * u1))}"/>
+          <polygon points="${x2},${y} ${x2 - 12},${y - 6} ${x2 - 12},${y + 6}" fill="${lCol}" opacity="${P4(outOp)}"/>
+          <rect x="${midX - 60}" y="${y - 14}" width="120" height="28" rx="14" fill="${lCol}" opacity="${P4(outOp)}"/>
+          <text x="${midX}" y="${y + 4.5}" text-anchor="middle" fill="#ffffff" font-family="-apple-system,sans-serif" font-size="12" font-weight="700" opacity="${P4(outOp)}">TLS 1.3 脱敏流</text>
+        `;
+      } else if (retOp > 0.005) {
+        const u0 = ((t - 17.85) * 0.95) % 1;
+        const u1 = ((t - 17.85) * 0.95 + 0.5) % 1;
+        const px0 = lerp(x2 - 6, x1 + 12, u0), px1 = lerp(x2 - 6, x1 + 12, u1);
+        svgHtml += `
+          <circle cx="${P4(px0)}" cy="${y}" r="4.5" fill="${lCol}" opacity="${P4(retOp * Math.sin(Math.PI * u0))}"/>
+          <circle cx="${P4(px1)}" cy="${y}" r="4.5" fill="${lCol}" opacity="${P4(retOp * Math.sin(Math.PI * u1))}"/>
+          <polygon points="${x1},${y} ${x1 + 12},${y - 6} ${x1 + 12},${y + 6}" fill="${lCol}" opacity="${P4(retOp)}"/>
+          <rect x="${midX - 66}" y="${y - 14}" width="132" height="28" rx="14" fill="${lCol}" opacity="${P4(retOp)}"/>
+          <text x="${midX}" y="${y + 4.5}" text-anchor="middle" fill="#ffffff" font-family="-apple-system,sans-serif" font-size="12" font-weight="700" opacity="${P4(retOp)}">Tool Use 响应</text>
+        `;
+      }
+    }
+  } else if (t >= 22.22 && t <= 23.62) {
+    renderGatewayWave(22.24, 22.38, 23.30, M.decSlots, M.vDecMask, L.gwDec, L.vaultDec[1], true, "#0284c7", "blue");
+  } else if (t >= 24.48 && t <= 26.22) {
+    renderGatewayWave(24.50, 24.62, 25.88, M.decSlots, M.vDecPlain, L.gwDec, L.vaultDec[1], false, "#16a34a", "green");
+  }
+
+  S(arrowSvg, "visibility", svgHtml ? "visible" : "hidden");
+  if (arrowSvg._last !== svgHtml) {
+    arrowSvg._last = svgHtml;
+    arrowSvg.innerHTML = svgHtml;
+  }
+
+  // 9. Finale Brand Lockup (36.20 - 39.00s) — Critically-Damped Zero-Overshoot Reveal
+  const finOn = t >= 36.18;
+  S(finaleLockup, "visibility", finOn ? "visible" : "hidden");
+  if (finOn) {
+    const k1 = springStep(t - 36.24, 13);
+    const k2 = springStep(t - 36.42, 13);
+    const k3 = springStep(t - 36.64, 13);
+    S(finaleLockup, "opacity", k1 >= 0.72 ? "1" : P4(clamp(k1 * 1.4)));
+    S(finTitle, "transform", k1 === 1 ? "none" : `translate(0,${P4((1 - k1) * 105)}%)`);
+    S(finSub, "transform", k2 === 1 ? "none" : `translate(0,${P4((1 - k2) * 110)}%)`);
+    S(finSub, "opacity", k2 >= 0.77 ? "1" : P4(clamp(k2 * 1.3)));
+    S(finSpec, "transform", k3 === 1 ? "none" : `translate(0,${P4((1 - k3) * 18)}px)`);
+    S(finSpec, "opacity", k3 === 1 ? "1" : P4(clamp(k3)));
+  }
+
+  // 10. Single Initial Send Click Cursor (1.72 - 2.75s ONLY!)
+  const pStart = [CX + (P ? 300 : 420), SY + (P ? 240 : 210)];
+  const pSend  = M.sendPt;
+  const pExit  = [CX + (P ? 360 : 500), SY + (P ? 290 : 250)];
+
+  const curVis = smooth(seg(t, 1.72, 1.95)) * (1 - smooth(seg(t, 2.55, 2.78)));
+  S(domCursor, "visibility", curVis > 0.002 ? "visible" : "hidden");
+  S(domCursor, "opacity", curVis > 0.002 ? P4(curVis) : "0");
+  if (curVis > 0.002) {
+    const curX = track(t, pStart[0], [
+      [1.82, pSend[0], 13],
+      [2.48, pExit[0], 10]
+    ]);
+    const curY = track(t, pStart[1], [
+      [1.82, pSend[1], 13],
+      [2.48, pExit[1], 10]
+    ]);
+    const cPress = Math.sin(Math.PI * seg(t, 2.30, 2.46));
+    S(domCursor, "transform", `translate(${P4(curX)}px,${P4(curY)}px) scale(${P4(1 - cPress * 0.14)})`);
+  } else {
+    S(domCursor, "transform", "none");
+  }
+
+  const ringActive = t >= 2.35 && t <= 2.72;
+  S(domClickRing, "visibility", ringActive ? "visible" : "hidden");
+  S(domClickRing, "opacity", ringActive ? P4((1 - seg(t, 2.35, 2.72)) * 0.65) : "0");
+  if (ringActive) {
+    const rk = seg(t, 2.35, 2.72);
+    S(domClickRing, "transform", `translate(${P4(pSend[0] - 22)}px,${P4(pSend[1] - 22)}px) scale(${P4(lerp(0.45, 1.8, 1 - Math.pow(1 - rk, 3)))})`);
+  } else {
+    S(domClickRing, "transform", "none");
+  }
+
+  // 11. Bottom Progress Hairline (Integer Pixel Width, Zero Transform Layer)
+  S(domProgress, "width", Math.round((t / DUR) * W) + "px");
+}
+
+window.__renderAt = seek;
+window.__DUR = DUR;
+
+document.fonts.ready.then(() => {
+  measureOnce();
+  seek(Number(Q.get("t") || 0));
+  window.__ready = true;
+  if (Q.get("play") === "1") {
+    const t0 = performance.now();
+    const tick = () => {
+      seek(((performance.now() - t0) / 1000) % DUR);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+});
+</script>
+</body>
+</html>

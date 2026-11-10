@@ -1,0 +1,9 @@
+.DS_Store
+frames_16x9/
+frames_9x16/
+stills_16x9/
+stills_9x16/
+qa_*/
+audit_bin
+*.sb-*
+node_modules/
